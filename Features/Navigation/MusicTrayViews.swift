@@ -64,8 +64,9 @@ struct MusicCompactBar: View {
         }
         .padding(.horizontal, LaneLineDesign.Spacing.medium)
         .padding(.vertical, LaneLineDesign.Spacing.small)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
+        // One glass surface for the whole strip — controls sit inside it
+        // rather than stacking glass on glass.
+        .rideGlass(in: RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
     }
 
     private var promptText: String {
@@ -169,32 +170,38 @@ struct MusicExpandedSheet: View {
                 }
             }
 
-            HStack(spacing: LaneLineDesign.Spacing.xlarge) {
-                Button {
-                    Task { await music.skipPrevious() }
-                } label: {
-                    Image(systemName: "backward.fill")
-                        .font(.title)
-                        .frame(width: LaneLineDesign.HitTarget.large, height: LaneLineDesign.HitTarget.large)
-                }
-                .accessibilityLabel("Previous track")
+            RideGlassContainer(spacing: LaneLineDesign.Spacing.xlarge) {
+                HStack(spacing: LaneLineDesign.Spacing.xlarge) {
+                    Button {
+                        Task { await music.skipPrevious() }
+                    } label: {
+                        Image(systemName: "backward.fill")
+                            .font(.title)
+                            .frame(width: LaneLineDesign.HitTarget.large, height: LaneLineDesign.HitTarget.large)
+                    }
+                    .buttonStyle(.plain)
+                    .rideGlass(in: Circle(), interactive: true)
+                    .accessibilityLabel("Previous track")
 
-                Button {
-                    Task { await music.playPause() }
-                } label: {
-                    Image(systemName: item.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 64))
-                }
-                .accessibilityLabel(item.isPlaying ? "Pause" : "Play")
+                    Button {
+                        Task { await music.playPause() }
+                    } label: {
+                        Image(systemName: item.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 64))
+                    }
+                    .accessibilityLabel(item.isPlaying ? "Pause" : "Play")
 
-                Button {
-                    Task { await music.skipNext() }
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.title)
-                        .frame(width: LaneLineDesign.HitTarget.large, height: LaneLineDesign.HitTarget.large)
+                    Button {
+                        Task { await music.skipNext() }
+                    } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.title)
+                            .frame(width: LaneLineDesign.HitTarget.large, height: LaneLineDesign.HitTarget.large)
+                    }
+                    .buttonStyle(.plain)
+                    .rideGlass(in: Circle(), interactive: true)
+                    .accessibilityLabel("Next track")
                 }
-                .accessibilityLabel("Next track")
             }
         }
     }
@@ -226,8 +233,7 @@ struct MusicExpandedSheet: View {
                                 }
                                 .padding(.horizontal, 14)
                                 .frame(height: LaneLineDesign.HitTarget.minimum)
-                                .background(LaneLineDesign.Colors.surfaceSecondary)
-                                .clipShape(Capsule())
+                                .rideGlass(in: Capsule(), interactive: true)
                             }
                             .buttonStyle(.plain)
                         }

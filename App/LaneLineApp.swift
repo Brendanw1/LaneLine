@@ -6,6 +6,22 @@ struct LaneLineApp: App {
     @State private var appModel: AppModel
 
     init() {
+        #if DEBUG
+        // `simctl launch booted com.laneline.LaneLine -demoRide` drops
+        // straight into an active ride over the sample network with mocked
+        // location and music — for screenshots and ride-screen iteration.
+        if ProcessInfo.processInfo.arguments.contains("-demoRide") {
+            let container = ServiceContainer.preview()
+            let model = AppModel(persistence: container.persistenceService)
+            model.riderProfile = PreviewData.riderProfile
+            model.onboardingComplete = true
+            model.isLoaded = true
+            model.activeRoute = PreviewData.sampleCandidates[0]
+            _services = State(initialValue: container)
+            _appModel = State(initialValue: model)
+            return
+        }
+        #endif
         let container = ServiceContainer.live()
         _services = State(initialValue: container)
         _appModel = State(initialValue: AppModel(persistence: container.persistenceService))

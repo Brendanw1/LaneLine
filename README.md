@@ -24,6 +24,16 @@ xcodebuild test -project LaneLine.xcodeproj -scheme LaneLine \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
+### Demo ride
+
+DEBUG builds accept a launch argument that drops straight into an active
+ride over the sample network with mocked location and music — handy for
+ride-screen iteration and screenshots:
+
+```sh
+xcrun simctl launch booted com.laneline.LaneLine -demoRide
+```
+
 ### Apple Music on device
 
 MusicKit needs the **MusicKit app service** enabled for the bundle ID
@@ -53,7 +63,8 @@ Services/
   Persistence/      UserDefaults-backed store behind a protocol
 Features/       One folder per screen flow (Onboarding, Search, RoutePlanning,
                 RouteComparison, RouteDetail, Navigation, SavedPlaces, Settings)
-DesignSystem/   Colors, typography, shared components, elevation chart
+DesignSystem/   Colors, typography, shared components, elevation chart,
+                Liquid Glass adoption layer (iOS 26+, material fallback)
 Resources/      SFSampleNetwork.json (bundled demo network)
 Scripts/        generate_sample_network.py (provenance for the sample data)
 Tests/          XCTest suite (28 tests)

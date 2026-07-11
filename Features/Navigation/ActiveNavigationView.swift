@@ -45,11 +45,14 @@ struct ActiveNavigationView: View {
             )
             model.start()
             ride = model
+            // A mounted phone must not lock mid-ride.
+            UIApplication.shared.isIdleTimerDisabled = true
             if musicEnabled && customization.musicTrayDefaultExpanded {
                 showMusicSheet = true
             }
         }
         .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
             ride?.end()
         }
     }
@@ -93,27 +96,36 @@ struct ActiveNavigationView: View {
 
     private func overlay(_ ride: ActiveRideModel) -> some View {
         VStack(spacing: LaneLineDesign.Spacing.small) {
-            ManeuverBanner(ride: ride, largerControls: largerControls)
-            statusRow(ride)
-            Spacer()
-
-            if customization.layoutMode != .standard || !customization.visibleSecondaryMetrics.isEmpty {
-                secondaryMetricsRow(ride)
-            }
-            metricsBar(ride)
-
-            if musicEnabled && !showMusicSheet {
-                MusicCompactBar(
-                    music: services.musicService,
-                    largerControls: largerControls
-                ) {
-                    showMusicSheet = true
+            RideGlassContainer {
+                VStack(spacing: LaneLineDesign.Spacing.small) {
+                    ManeuverBanner(ride: ride, largerControls: largerControls)
+                    statusRow(ride)
                 }
             }
+            Spacer()
 
-            controlsRow(ride)
+            RideGlassContainer {
+                VStack(spacing: LaneLineDesign.Spacing.small) {
+                    if customization.layoutMode != .standard || !customization.visibleSecondaryMetrics.isEmpty {
+                        secondaryMetricsRow(ride)
+                    }
+                    metricsBar(ride)
+
+                    if musicEnabled && !showMusicSheet {
+                        MusicCompactBar(
+                            music: services.musicService,
+                            largerControls: largerControls
+                        ) {
+                            showMusicSheet = true
+                        }
+                    }
+
+                    controlsRow(ride)
+                }
+            }
         }
         .padding(LaneLineDesign.Spacing.medium)
+        .environment(\.prefersOpaqueRideSurfaces, customization.highContrastEnabled)
     }
 
     private func statusRow(_ ride: ActiveRideModel) -> some View {
@@ -143,8 +155,7 @@ struct ActiveNavigationView: View {
             .foregroundStyle(tint)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
+            .rideGlass(in: Capsule())
     }
 
     // MARK: Metrics
@@ -169,8 +180,7 @@ struct ActiveNavigationView: View {
             }
         }
         .padding(.vertical, LaneLineDesign.Spacing.medium)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
+        .rideGlass(in: RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
     }
 
     private struct PrimaryMetric {
@@ -250,8 +260,7 @@ struct ActiveNavigationView: View {
             .foregroundStyle(tint)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
+            .rideGlass(in: Capsule())
     }
 
     // MARK: Controls
@@ -289,8 +298,7 @@ struct ActiveNavigationView: View {
                         ? LaneLineDesign.HitTarget.large
                         : LaneLineDesign.HitTarget.comfortable)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(LaneLineDesign.Colors.danger)
+            .prominentRideButtonStyle(tint: LaneLineDesign.Colors.danger)
         }
     }
 
@@ -306,8 +314,11 @@ struct ActiveNavigationView: View {
                     ? LaneLineDesign.HitTarget.large
                     : LaneLineDesign.HitTarget.comfortable)
         }
-        .buttonStyle(.bordered)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.medium))
+        .buttonStyle(.plain)
+        .rideGlass(
+            in: RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.medium),
+            interactive: true
+        )
         .accessibilityLabel(label)
     }
 }
@@ -352,8 +363,7 @@ struct ManeuverBanner: View {
             Spacer()
         }
         .padding(LaneLineDesign.Spacing.medium)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
+        .rideGlass(in: RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
         .accessibilityElement(children: .combine)
     }
 }
