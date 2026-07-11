@@ -1,0 +1,859 @@
+{
+  "metadata": {
+    "source": "LaneLine bundled SF sample network",
+    "description": "Curated demo subgraph of real SF corridors (Valencia, Market, Folsom, the Wiggle, Panhandle, Haight, Castro). Feeds the same NetworkGraphBuilder pipeline as live DataSF/OSM ingestion.",
+    "region": "San Francisco",
+    "schemaVersion": 1
+  },
+  "nodes": [
+    {
+      "id": "17_castro",
+      "latitude": 37.7626,
+      "longitude": -122.4352,
+      "elevationMeters": 44
+    },
+    {
+      "id": "17_church",
+      "latitude": 37.7631,
+      "longitude": -122.4287,
+      "elevationMeters": 22
+    },
+    {
+      "id": "17_val",
+      "latitude": 37.7634,
+      "longitude": -122.4218,
+      "elevationMeters": 13
+    },
+    {
+      "id": "castro_14",
+      "latitude": 37.7675,
+      "longitude": -122.4353,
+      "elevationMeters": 58
+    },
+    {
+      "id": "div_fell",
+      "latitude": 37.7743,
+      "longitude": -122.438,
+      "elevationMeters": 35
+    },
+    {
+      "id": "dub_castro",
+      "latitude": 37.7693,
+      "longitude": -122.4351,
+      "elevationMeters": 38
+    },
+    {
+      "id": "dub_ch",
+      "latitude": 37.7693,
+      "longitude": -122.429,
+      "elevationMeters": 26
+    },
+    {
+      "id": "dub_st",
+      "latitude": 37.7694,
+      "longitude": -122.4332,
+      "elevationMeters": 22
+    },
+    {
+      "id": "emb_fol",
+      "latitude": 37.7902,
+      "longitude": -122.3897,
+      "elevationMeters": 3
+    },
+    {
+      "id": "fell_baker",
+      "latitude": 37.7744,
+      "longitude": -122.4412,
+      "elevationMeters": 38
+    },
+    {
+      "id": "ferry",
+      "latitude": 37.7955,
+      "longitude": -122.3937,
+      "elevationMeters": 3
+    },
+    {
+      "id": "fol_11",
+      "latitude": 37.774,
+      "longitude": -122.4154,
+      "elevationMeters": 12
+    },
+    {
+      "id": "fol_2",
+      "latitude": 37.7856,
+      "longitude": -122.3948,
+      "elevationMeters": 6
+    },
+    {
+      "id": "fol_5",
+      "latitude": 37.7815,
+      "longitude": -122.4036,
+      "elevationMeters": 8
+    },
+    {
+      "id": "fol_8",
+      "latitude": 37.7776,
+      "longitude": -122.4108,
+      "elevationMeters": 10
+    },
+    {
+      "id": "ggp",
+      "latitude": 37.7725,
+      "longitude": -122.4603,
+      "elevationMeters": 55
+    },
+    {
+      "id": "haight_div",
+      "latitude": 37.7712,
+      "longitude": -122.4387,
+      "elevationMeters": 42
+    },
+    {
+      "id": "haight_fill",
+      "latitude": 37.7721,
+      "longitude": -122.4306,
+      "elevationMeters": 30
+    },
+    {
+      "id": "haight_masonic",
+      "latitude": 37.7702,
+      "longitude": -122.4454,
+      "elevationMeters": 58
+    },
+    {
+      "id": "haight_scott",
+      "latitude": 37.7717,
+      "longitude": -122.4366,
+      "elevationMeters": 32
+    },
+    {
+      "id": "haight_stanyan",
+      "latitude": 37.769,
+      "longitude": -122.453,
+      "elevationMeters": 76
+    },
+    {
+      "id": "m13",
+      "latitude": 37.77,
+      "longitude": -122.4203,
+      "elevationMeters": 12
+    },
+    {
+      "id": "m16",
+      "latitude": 37.765,
+      "longitude": -122.4199,
+      "elevationMeters": 11
+    },
+    {
+      "id": "m20",
+      "latitude": 37.7589,
+      "longitude": -122.4193,
+      "elevationMeters": 13
+    },
+    {
+      "id": "m24",
+      "latitude": 37.7523,
+      "longitude": -122.4186,
+      "elevationMeters": 18
+    },
+    {
+      "id": "mkt_4",
+      "latitude": 37.7856,
+      "longitude": -122.4048,
+      "elevationMeters": 8
+    },
+    {
+      "id": "mkt_7",
+      "latitude": 37.7797,
+      "longitude": -122.4127,
+      "elevationMeters": 11
+    },
+    {
+      "id": "mkt_beale",
+      "latitude": 37.7924,
+      "longitude": -122.3966,
+      "elevationMeters": 4
+    },
+    {
+      "id": "mkt_church",
+      "latitude": 37.7673,
+      "longitude": -122.4292,
+      "elevationMeters": 30
+    },
+    {
+      "id": "mkt_oct",
+      "latitude": 37.7713,
+      "longitude": -122.424,
+      "elevationMeters": 17
+    },
+    {
+      "id": "mkt_vn",
+      "latitude": 37.775,
+      "longitude": -122.4194,
+      "elevationMeters": 20
+    },
+    {
+      "id": "oak_baker",
+      "latitude": 37.7735,
+      "longitude": -122.4419,
+      "elevationMeters": 40
+    },
+    {
+      "id": "oak_div",
+      "latitude": 37.7734,
+      "longitude": -122.4377,
+      "elevationMeters": 37
+    },
+    {
+      "id": "oak_scott",
+      "latitude": 37.7743,
+      "longitude": -122.4364,
+      "elevationMeters": 32
+    },
+    {
+      "id": "pan_masonic",
+      "latitude": 37.7728,
+      "longitude": -122.4466,
+      "elevationMeters": 44
+    },
+    {
+      "id": "pier_haight",
+      "latitude": 37.7718,
+      "longitude": -122.4357,
+      "elevationMeters": 30
+    },
+    {
+      "id": "scott_fell",
+      "latitude": 37.7752,
+      "longitude": -122.437,
+      "elevationMeters": 33
+    },
+    {
+      "id": "stanyan",
+      "latitude": 37.7715,
+      "longitude": -122.4533,
+      "elevationMeters": 48
+    },
+    {
+      "id": "stei_wal",
+      "latitude": 37.7712,
+      "longitude": -122.4334,
+      "elevationMeters": 24
+    },
+    {
+      "id": "v16",
+      "latitude": 37.7649,
+      "longitude": -122.4219,
+      "elevationMeters": 12
+    },
+    {
+      "id": "v20",
+      "latitude": 37.7588,
+      "longitude": -122.4213,
+      "elevationMeters": 14
+    },
+    {
+      "id": "v24",
+      "latitude": 37.75215,
+      "longitude": -122.4206,
+      "elevationMeters": 19
+    },
+    {
+      "id": "vmkt",
+      "latitude": 37.771,
+      "longitude": -122.4226,
+      "elevationMeters": 16
+    },
+    {
+      "id": "wal_pier",
+      "latitude": 37.7713,
+      "longitude": -122.4356,
+      "elevationMeters": 27
+    }
+  ],
+  "edges": [
+    {
+      "fromNode": "v24",
+      "toNode": "v20",
+      "streetName": "Valencia St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "v20",
+      "toNode": "v16",
+      "streetName": "Valencia St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "v16",
+      "toNode": "vmkt",
+      "streetName": "Valencia St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "m24",
+      "toNode": "m20",
+      "streetName": "Mission St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "arterial",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "m20",
+      "toNode": "m16",
+      "streetName": "Mission St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "arterial",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "m16",
+      "toNode": "m13",
+      "streetName": "Mission St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "arterial",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "v24",
+      "toNode": "m24",
+      "streetName": "24th St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "tertiary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.8
+    },
+    {
+      "fromNode": "v16",
+      "toNode": "m16",
+      "streetName": "16th St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.7
+    },
+    {
+      "fromNode": "17_castro",
+      "toNode": "mkt_church",
+      "streetName": "Market St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "standard",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "mkt_church",
+      "toNode": "mkt_oct",
+      "streetName": "Market St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "standard",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "vmkt",
+      "toNode": "mkt_oct",
+      "streetName": "Market St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "standard",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "mkt_oct",
+      "toNode": "mkt_vn",
+      "streetName": "Market St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "buffered",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "mkt_vn",
+      "toNode": "mkt_7",
+      "streetName": "Market St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "mkt_7",
+      "toNode": "mkt_4",
+      "streetName": "Market St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "mkt_4",
+      "toNode": "mkt_beale",
+      "streetName": "Market St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "mkt_beale",
+      "toNode": "ferry",
+      "streetName": "Market St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "m13",
+      "toNode": "fol_11",
+      "streetName": "11th St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "standard",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.85
+    },
+    {
+      "fromNode": "fol_11",
+      "toNode": "fol_8",
+      "streetName": "Folsom St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "buffered",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "fol_8",
+      "toNode": "fol_5",
+      "streetName": "Folsom St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "buffered",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "fol_5",
+      "toNode": "fol_2",
+      "streetName": "Folsom St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "buffered",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "fol_2",
+      "toNode": "emb_fol",
+      "streetName": "Folsom St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "emb_fol",
+      "toNode": "ferry",
+      "streetName": "The Embarcadero",
+      "facilityType": "offStreetPath",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "residential",
+      "surfaceType": "concrete",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "fol_5",
+      "toNode": "mkt_4",
+      "streetName": "5th St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "standard",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.85
+    },
+    {
+      "fromNode": "vmkt",
+      "toNode": "m13",
+      "streetName": "Duboce Ave",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "primary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.7
+    },
+    {
+      "fromNode": "mkt_church",
+      "toNode": "dub_ch",
+      "streetName": "Church St",
+      "facilityType": "bikeRoute",
+      "protectionLevel": "none",
+      "roadClass": "tertiary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.8
+    },
+    {
+      "fromNode": "17_church",
+      "toNode": "mkt_church",
+      "streetName": "Church St",
+      "facilityType": "bikeRoute",
+      "protectionLevel": "none",
+      "roadClass": "tertiary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.8
+    },
+    {
+      "fromNode": "dub_ch",
+      "toNode": "dub_st",
+      "streetName": "Duboce Ave Bikeway",
+      "facilityType": "offStreetPath",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "dub_st",
+      "toNode": "stei_wal",
+      "streetName": "Steiner St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "stei_wal",
+      "toNode": "wal_pier",
+      "streetName": "Waller St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "wal_pier",
+      "toNode": "pier_haight",
+      "streetName": "Pierce St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "pier_haight",
+      "toNode": "haight_scott",
+      "streetName": "Haight St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "haight_scott",
+      "toNode": "scott_fell",
+      "streetName": "Scott St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "scott_fell",
+      "toNode": "div_fell",
+      "streetName": "Fell St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "buffered",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": true,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "div_fell",
+      "toNode": "fell_baker",
+      "streetName": "Fell St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "buffered",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": true,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "oak_baker",
+      "toNode": "oak_div",
+      "streetName": "Oak St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": true,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "oak_div",
+      "toNode": "oak_scott",
+      "streetName": "Oak St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": true,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "oak_scott",
+      "toNode": "scott_fell",
+      "streetName": "Scott St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "fell_baker",
+      "toNode": "oak_baker",
+      "streetName": "Baker St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "fell_baker",
+      "toNode": "pan_masonic",
+      "streetName": "Panhandle Path",
+      "facilityType": "offStreetPath",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "residential",
+      "surfaceType": "paved",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "pan_masonic",
+      "toNode": "stanyan",
+      "streetName": "Panhandle Path",
+      "facilityType": "offStreetPath",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "residential",
+      "surfaceType": "paved",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "stanyan",
+      "toNode": "ggp",
+      "streetName": "JFK Promenade",
+      "facilityType": "offStreetPath",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "vmkt",
+      "toNode": "haight_fill",
+      "streetName": "Haight St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "haight_fill",
+      "toNode": "haight_div",
+      "streetName": "Haight St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "haight_div",
+      "toNode": "haight_masonic",
+      "streetName": "Haight St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "haight_masonic",
+      "toNode": "haight_stanyan",
+      "streetName": "Haight St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "haight_stanyan",
+      "toNode": "stanyan",
+      "streetName": "Stanyan St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.7
+    },
+    {
+      "fromNode": "haight_div",
+      "toNode": "div_fell",
+      "streetName": "Divisadero St",
+      "facilityType": "mixedTraffic",
+      "protectionLevel": "none",
+      "roadClass": "arterial",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.75
+    },
+    {
+      "fromNode": "v16",
+      "toNode": "17_val",
+      "streetName": "Valencia St",
+      "facilityType": "protectedBikeLane",
+      "protectionLevel": "fullyProtected",
+      "roadClass": "secondary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "17_val",
+      "toNode": "17_church",
+      "streetName": "17th St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "standard",
+      "roadClass": "tertiary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "17_church",
+      "toNode": "17_castro",
+      "streetName": "17th St",
+      "facilityType": "bikeLane",
+      "protectionLevel": "standard",
+      "roadClass": "tertiary",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.95
+    },
+    {
+      "fromNode": "17_castro",
+      "toNode": "castro_14",
+      "streetName": "Castro St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.8
+    },
+    {
+      "fromNode": "castro_14",
+      "toNode": "dub_castro",
+      "streetName": "Castro St",
+      "facilityType": "sharedLane",
+      "protectionLevel": "sharrows",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.8
+    },
+    {
+      "fromNode": "dub_castro",
+      "toNode": "dub_st",
+      "streetName": "Duboce Ave",
+      "facilityType": "bikeRoute",
+      "protectionLevel": "none",
+      "roadClass": "residential",
+      "surfaceType": "asphalt",
+      "oneWay": false,
+      "confidence": 0.8
+    }
+  ]
+}

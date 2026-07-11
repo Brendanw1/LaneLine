@@ -1,0 +1,19 @@
+# Xcode
+*.xcodeproj
+!project.yml
+xcuserdata/
+DerivedData/
+*.xcresult
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Local session exports / scratch
+*-local-command-caveat*.txt
+
+# Secrets — Socrata app tokens, etc. Never commit.
+Support/Secrets.xcconfig

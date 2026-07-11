@@ -1,0 +1,65 @@
+name: LaneLine
+options:
+  bundleIdPrefix: com.laneline
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+    CODE_SIGN_STYLE: Automatic
+    # MusicKit requires the "MusicKit" app service to be enabled for this
+    # bundle ID in the Apple Developer portal (Certificates, Identifiers &
+    # Profiles > Identifiers > App Services). No entitlement file is needed.
+
+targets:
+  LaneLine:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Core
+      - Models
+      - Services
+      - Features
+      - DesignSystem
+      - PreviewContent
+      # Copied as individual files, not a folder reference: a top-level
+      # "Resources" directory inside an iOS bundle breaks CFBundle's flat
+      # layout detection and the simulator rejects the install.
+      - path: Resources
+        buildPhase: resources
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleDisplayName: LaneLine
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSAppleMusicUsageDescription: >-
+          LaneLine shows your Apple Music now playing info and ride playlists
+          on the navigation screen so you can control music without leaving
+          turn-by-turn guidance.
+        NSLocationWhenInUseUsageDescription: >-
+          LaneLine uses your location to plan bike routes from where you are
+          and to guide you turn by turn while riding.
+        UIBackgroundModes:
+          - audio
+          - location
+        ITSAppUsesNonExemptEncryption: false
+    scheme:
+      testTargets:
+        - LaneLineTests
+
+  LaneLineTests:
+    type: bundle.unit-test
+    platform: iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+    sources:
+      - Tests
+    dependencies:
+      - target: LaneLine
