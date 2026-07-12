@@ -3,10 +3,11 @@ import CoreLocation
 import Observation
 
 /// Live state for an active ride. Progress comes from CoreLocation when the
-/// rider has a fix near the route; otherwise a simulation engine advances
-/// along the geometry at bike-appropriate speeds so the ride screen is fully
-/// exercisable in the simulator. Voice guidance is scaffolded (mute toggle,
-/// maneuver stream) but not synthesized in v1.
+/// rider has a fix near the route; a sustained fix far from the route flips
+/// into off-route handling (freeze, announce, auto-reroute from the rider's
+/// real position). Without any fix (simulator, demo) a simulation engine
+/// advances along the geometry at bike-appropriate speeds. Turn-by-turn
+/// voice guidance speaks through `RideVoiceGuiding`, ducking music.
 @MainActor
 @Observable
 final class ActiveRideModel {
@@ -17,7 +18,12 @@ final class ActiveRideModel {
     private(set) var elapsedSeconds: Double = 0
     private(set) var isPaused = false
     private(set) var isRerouting = false
-    var guidanceMuted = false
+    private(set) var isOffRoute = false
+    var guidanceMuted = false {
+        didSet {
+            voiceGuide?.isMuted = guidanceMuted
+        }
+    }
 
     // MARK: Derived metrics
 
@@ -101,22 +107,34 @@ final class ActiveRideModel {
 
     private let locationService: any LocationServicing
     private let routingService: any RoutingServiceProtocol
+    private let voiceGuide: (any RideVoiceGuiding)?
 
-    /// Location fixes farther than this from the route fall back to
-    /// simulation (GPS drift, indoor testing, simulator).
+    /// Location fixes farther than this from the route count as off-route.
     private let liveTrackingToleranceMeters: Double = 150
+    /// Sustained off-route time before an automatic re-plan (and between
+    /// retries when re-planning keeps failing).
+    private let offRouteRerouteAfterSeconds: Double = 10
+    private var offRouteSeconds: Double = 0
+
+    // Announcement bookkeeping, keyed by upcoming segment index.
+    private var announcedApproach: Set<Int> = []
+    private var announcedImminent: Set<Int> = []
+    private var announcedStart = false
+    private var announcedArrival = false
 
     init(
         route: RouteCandidate,
         profile: RiderProfile,
         locationService: any LocationServicing,
-        routingService: any RoutingServiceProtocol
+        routingService: any RoutingServiceProtocol,
+        voiceGuide: (any RideVoiceGuiding)? = nil
     ) {
         self.route = route
         self.profile = profile
         self.bikeType = profile.bikeType
         self.locationService = locationService
         self.routingService = routingService
+        self.voiceGuide = voiceGuide
         rebuildGeometry()
     }
 
@@ -172,43 +190,117 @@ final class ActiveRideModel {
     func end() {
         tickTask?.cancel()
         tickTask = nil
+        voiceGuide?.stopSpeaking()
         locationService.stopUpdating()
     }
 
-    /// Re-plan from the current position to the route's destination using the
-    /// same strategy, and continue on the fresh route.
+    /// Re-plan to the route's destination using the same strategy, from the
+    /// rider's real position when there is a fix (they may have left the
+    /// line), otherwise from the route position.
     func reroute() async {
         guard let destination = route.allCoordinates.last, !isRerouting else { return }
         isRerouting = true
         defer { isRerouting = false }
 
+        let origin = locationService.currentLocation?.coordinate ?? currentCoordinate
         if let fresh = try? await routingService.generateRoutes(
-            from: currentCoordinate,
+            from: origin,
             to: destination,
             profile: profile,
             strategies: [route.strategyType]
         ).first {
             route = fresh
             progressMeters = 0
+            isOffRoute = false
+            offRouteSeconds = 0
+            resetAnnouncements()
             rebuildGeometry()
+            voiceGuide?.announce(RideAnnouncements.rerouted)
         }
     }
 
     // MARK: Progress
 
-    private func tick(deltaSeconds: Double) {
+    /// One clock tick. Internal (not private) so tests can drive time
+    /// deterministically without the wall-clock task.
+    func tick(deltaSeconds: Double) {
         guard !isPaused, !isComplete else { return }
         elapsedSeconds += deltaSeconds
 
-        // Prefer real position when it's plausibly on this route.
         if let location = locationService.currentLocation,
-           let snapped = snapToRoute(location.coordinate),
-           snapped.distanceFromRoute <= liveTrackingToleranceMeters {
-            // Never move backwards on GPS jitter.
-            progressMeters = max(progressMeters, snapped.progress)
+           let snapped = snapToRoute(location.coordinate) {
+            if snapped.distanceFromRoute <= liveTrackingToleranceMeters {
+                isOffRoute = false
+                offRouteSeconds = 0
+                // Never move backwards on GPS jitter.
+                progressMeters = max(progressMeters, snapped.progress)
+            } else {
+                // Real fix, far from the route: the rider left the line.
+                // Freeze progress and re-plan from where they actually are.
+                offRouteSeconds += deltaSeconds
+                if offRouteSeconds >= offRouteRerouteAfterSeconds, !isRerouting {
+                    offRouteSeconds = 0
+                    if !isOffRoute {
+                        isOffRoute = true
+                        voiceGuide?.announce(RideAnnouncements.offRoute)
+                    }
+                    Task { await reroute() }
+                }
+            }
         } else {
+            // No fix at all (simulator, demo): advance along the geometry at
+            // bike-appropriate speeds so the screen is fully exercisable.
             let speedMs = CyclingSpeedModel.speedKmh(bikeType: bikeType, grade: currentGrade) / 3.6
             progressMeters = min(totalMeters, progressMeters + speedMs * deltaSeconds)
+        }
+
+        updateAnnouncements()
+    }
+
+    // MARK: Voice guidance triggers
+
+    private func resetAnnouncements() {
+        announcedApproach = []
+        announcedImminent = []
+        announcedArrival = false
+    }
+
+    private func updateAnnouncements() {
+        guard let voiceGuide else { return }
+
+        if !announcedStart {
+            announcedStart = true
+            voiceGuide.announce(RideAnnouncements.rideStart(
+                street: currentStreet, totalMeters: totalMeters
+            ))
+        }
+
+        if isComplete {
+            if !announcedArrival {
+                announcedArrival = true
+                voiceGuide.announce(RideAnnouncements.arrival)
+            }
+            return
+        }
+
+        guard let next = nextSegment,
+              let distance = distanceToNextTurnMeters,
+              let index = currentSegmentIndex else { return }
+        let turnKey = index + 1
+
+        if distance <= 60 {
+            if !announcedImminent.contains(turnKey) {
+                announcedImminent.insert(turnKey)
+                announcedApproach.insert(turnKey)
+                voiceGuide.announce(RideAnnouncements.imminent(
+                    turn: next.turnType, street: next.streetName
+                ))
+            }
+        } else if distance <= 350, !announcedApproach.contains(turnKey) {
+            announcedApproach.insert(turnKey)
+            voiceGuide.announce(RideAnnouncements.approach(
+                turn: next.turnType, street: next.streetName, inMeters: distance
+            ))
         }
     }
 

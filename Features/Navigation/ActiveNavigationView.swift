@@ -41,7 +41,8 @@ struct ActiveNavigationView: View {
                 route: route,
                 profile: appModel.riderProfile,
                 locationService: services.locationService,
-                routingService: services.routingService
+                routingService: services.routingService,
+                voiceGuide: RideVoiceGuide()
             )
             model.start()
             ride = model
@@ -130,6 +131,9 @@ struct ActiveNavigationView: View {
 
     private func statusRow(_ ride: ActiveRideModel) -> some View {
         HStack(spacing: LaneLineDesign.Spacing.small) {
+            if ride.isOffRoute {
+                statusChip(text: "Off route", icon: "location.slash", tint: LaneLineDesign.Colors.warning)
+            }
             if ride.isRerouting {
                 statusChip(text: "Rerouting…", icon: "arrow.triangle.2.circlepath", tint: LaneLineDesign.Colors.primary)
             }

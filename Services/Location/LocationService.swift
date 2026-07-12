@@ -119,8 +119,12 @@ final class MockLocationService: LocationServicing {
 
     var isAuthorized: Bool { authorizationStatus == .authorizedWhenInUse }
 
-    init(coordinate: CLLocationCoordinate2D = .init(latitude: 37.76490, longitude: -122.42190)) {
-        currentLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+    /// Pass `nil` for a fix-less mock: ride progress then falls back to the
+    /// simulation engine, which is what demo mode wants.
+    init(coordinate: CLLocationCoordinate2D? = .init(latitude: 37.76490, longitude: -122.42190)) {
+        if let coordinate {
+            currentLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        }
     }
 
     func requestAuthorization() {}

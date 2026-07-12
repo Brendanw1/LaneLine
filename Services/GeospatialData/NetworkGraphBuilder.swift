@@ -147,13 +147,17 @@ struct NetworkGraphBuilder {
             }
         }
 
-        // Elevation enrichment per unique node. Sample-network nodes arrive
-        // with elevations baked in; live ingestion resolves them via USGS.
+        // Elevation enrichment per unique node, in one batch: city-scale
+        // graphs have tens of thousands of nodes, so per-point queries are
+        // not viable on a phone. Sample-network nodes arrive with elevations
+        // baked in and skip the lookup entirely.
         if let elevationProvider {
-            for node in nodes where elevations[node.id] == nil {
-                if let elevation = try await elevationProvider
-                    .elevationMeters(at: node.coordinate.clCoordinate) {
-                    elevations[node.id] = elevation
+            let pending = nodes.filter { elevations[$0.id] == nil }
+            if !pending.isEmpty {
+                let fetched = try await elevationProvider
+                    .elevationsMeters(at: pending.map(\.coordinate.clCoordinate))
+                for (node, elevation) in zip(pending, fetched) {
+                    if let elevation { elevations[node.id] = elevation }
                 }
             }
         }

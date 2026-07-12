@@ -11,7 +11,12 @@ struct LaneLineApp: App {
         // straight into an active ride over the sample network with mocked
         // location and music — for screenshots and ride-screen iteration.
         if ProcessInfo.processInfo.arguments.contains("-demoRide") {
-            let container = ServiceContainer.preview()
+            // Fix-less location mock: the ride advances via simulation, so
+            // the demo moves along the route and voice guidance fires.
+            let container = ServiceContainer(
+                locationService: MockLocationService(coordinate: nil),
+                musicService: MockMusicService()
+            )
             let model = AppModel(persistence: container.persistenceService)
             model.riderProfile = PreviewData.riderProfile
             model.onboardingComplete = true

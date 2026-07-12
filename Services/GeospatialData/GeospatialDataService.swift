@@ -25,7 +25,7 @@ protocol GeospatialDataServiceProtocol: Sendable {
     func routeGraph(covering bounds: BoundingBox) async throws -> RouteGraph
 
     /// Run the full live ingestion pipeline (DataSF bikeways + OSM streets +
-    /// USGS elevation), cache the result to disk, and serve it thereafter.
+    /// batched elevation), cache the result to disk, and serve it thereafter.
     func ingestLiveNetwork(in bounds: BoundingBox) async throws -> RouteGraph
 
     var currentSource: NetworkSource { get async }
@@ -33,9 +33,9 @@ protocol GeospatialDataServiceProtocol: Sendable {
 
 /// Orchestrates the ingestion pipeline:
 ///
-///     DataSF bikeways ─┐
-///     OSM streets ─────┼─> NetworkGraphBuilder ─> RouteGraph ─> disk cache
-///     USGS elevation ──┘
+///     DataSF bikeways ─────────────────┐
+///     OSM streets ─────────────────────┼─> NetworkGraphBuilder ─> RouteGraph ─> disk cache
+///     Elevation (Open-Meteo ⇢ USGS) ───┘
 ///
 /// The bundled sample network flows through the identical builder, so route
 /// scoring behaves the same in demo and live modes.
@@ -63,7 +63,7 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
         self.bikewayProvider = bikewayProvider
         self.streetProvider = streetProvider
         self.elevationProvider = elevationProvider
-            ?? CachingElevationProvider(upstream: USGSElevationClient())
+            ?? CachingElevationProvider(upstream: CompositeElevationClient())
         self.sampleLoader = sampleLoader
         self.builder = builder
         let directory = cacheDirectory
