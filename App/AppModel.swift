@@ -17,6 +17,12 @@ final class AppModel {
     /// Non-nil while a ride is active; drives the full-screen ride cover.
     var activeRoute: RouteCandidate?
 
+    /// Set when a ride ends; drives the summary cover with save/discard.
+    var pendingRideRecord: RideRecord?
+    /// A finished ride whose final save failed; drives a retry alert. The
+    /// record stays in memory so no data is lost.
+    var failedRideSave: RideRecord?
+
     private let persistence: any PersistenceServiceProtocol
 
     init(persistence: any PersistenceServiceProtocol) {
@@ -89,5 +95,10 @@ final class AppModel {
 
     func endRide() {
         activeRoute = nil
+    }
+
+    func finishRide(with record: RideRecord?) {
+        activeRoute = nil
+        pendingRideRecord = record
     }
 }

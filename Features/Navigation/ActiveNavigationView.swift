@@ -342,7 +342,8 @@ struct ActiveNavigationView: View {
 
             Button {
                 ride.end()
-                appModel.endRide()
+                let record = recorder?.finish()
+                appModel.finishRide(with: record)
             } label: {
                 Label("End", systemImage: "xmark")
                     .font(.subheadline.weight(.bold))

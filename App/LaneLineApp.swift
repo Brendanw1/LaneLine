@@ -47,6 +47,13 @@ struct RootView: View {
     @Environment(\.services) private var services
     @Environment(AppModel.self) private var appModel
 
+    /// Rides shown at ride end are complete regardless of checkpoint state.
+    private func completed(_ record: RideRecord) -> RideRecord {
+        var record = record
+        record.summary.isComplete = true
+        return record
+    }
+
     var body: some View {
         @Bindable var appModel = appModel
 
@@ -61,6 +68,42 @@ struct RootView: View {
         }
         .fullScreenCover(item: $appModel.activeRoute) { route in
             ActiveNavigationView(route: route)
+        }
+        .fullScreenCover(item: $appModel.pendingRideRecord) { record in
+            RideSummaryView(
+                record: completed(record),
+                onSave: {
+                    let final = completed(record)
+                    appModel.pendingRideRecord = nil
+                    Task {
+                        do { try await services.rideStore.save(final) }
+                        catch { appModel.failedRideSave = final }
+                    }
+                },
+                onDiscard: {
+                    Task { await services.rideStore.delete(id: record.id) }
+                    appModel.pendingRideRecord = nil
+                }
+            )
+        }
+        .alert(
+            "Couldn't save your ride",
+            isPresented: Binding(
+                get: { appModel.failedRideSave != nil },
+                set: { if !$0 { appModel.failedRideSave = nil } }
+            )
+        ) {
+            Button("Try again") {
+                guard let record = appModel.failedRideSave else { return }
+                appModel.failedRideSave = nil
+                Task {
+                    do { try await services.rideStore.save(record) }
+                    catch { appModel.failedRideSave = record }
+                }
+            }
+            Button("Discard", role: .cancel) { appModel.failedRideSave = nil }
+        } message: {
+            Text("The ride couldn't be written to storage. It is still in memory — try again, or discard it.")
         }
         .task {
             await appModel.load()
