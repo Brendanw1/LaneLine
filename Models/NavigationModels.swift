@@ -83,6 +83,9 @@ struct RideScreenCustomization: Codable, Equatable {
     var metricsPriority: MetricsPriority
     var musicTrayDefaultExpanded: Bool
     var visibleSecondaryMetrics: Set<SecondaryMetric>
+    var dataPages: [RideDataPage]
+
+    static let maxDataPages = 3
 
     enum SecondaryMetric: String, Codable, CaseIterable {
         case currentGrade
@@ -90,6 +93,38 @@ struct RideScreenCustomization: Codable, Equatable {
         case routeQuality
         case currentSpeed
         case averageSpeed
+    }
+
+    init(
+        layoutMode: LayoutMode,
+        largerControlsEnabled: Bool,
+        highContrastEnabled: Bool,
+        metricsPriority: MetricsPriority,
+        musicTrayDefaultExpanded: Bool,
+        visibleSecondaryMetrics: Set<SecondaryMetric>,
+        dataPages: [RideDataPage] = [.defaultPage()]
+    ) {
+        self.layoutMode = layoutMode
+        self.largerControlsEnabled = largerControlsEnabled
+        self.highContrastEnabled = highContrastEnabled
+        self.metricsPriority = metricsPriority
+        self.musicTrayDefaultExpanded = musicTrayDefaultExpanded
+        self.visibleSecondaryMetrics = visibleSecondaryMetrics
+        self.dataPages = dataPages
+    }
+
+    /// Custom decoding so customizations saved before `dataPages` existed
+    /// still load (the store falls back to `.default` on decode failure,
+    /// which would silently reset the rider's other choices).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        layoutMode = try c.decode(LayoutMode.self, forKey: .layoutMode)
+        largerControlsEnabled = try c.decode(Bool.self, forKey: .largerControlsEnabled)
+        highContrastEnabled = try c.decode(Bool.self, forKey: .highContrastEnabled)
+        metricsPriority = try c.decode(MetricsPriority.self, forKey: .metricsPriority)
+        musicTrayDefaultExpanded = try c.decode(Bool.self, forKey: .musicTrayDefaultExpanded)
+        visibleSecondaryMetrics = try c.decode(Set<SecondaryMetric>.self, forKey: .visibleSecondaryMetrics)
+        dataPages = try c.decodeIfPresent([RideDataPage].self, forKey: .dataPages) ?? [.defaultPage()]
     }
 
     static let `default` = RideScreenCustomization(
