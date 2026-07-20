@@ -124,6 +124,9 @@ struct MainTabView: View {
             SavedPlacesView()
                 .tabItem { Label("Places", systemImage: "bookmark") }
 
+            RideHistoryView()
+                .tabItem { Label("Rides", systemImage: "clock.arrow.circlepath") }
+
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
