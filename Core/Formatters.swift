@@ -44,4 +44,24 @@ enum RideFormat {
     static func score(_ value: Double) -> String {
         String(format: "%.1f", value * 10)
     }
+
+    /// Speed magnitude without unit — data cells show the unit separately.
+    static func speedValue(_ kmh: Double) -> String {
+        String(format: "%.1f", max(0, kmh))
+    }
+
+    /// Ride-timer style: "12:05" under an hour, "1:02:05" over.
+    static func stopwatch(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        return h > 0
+            ? String(format: "%d:%02d:%02d", h, m, s)
+            : String(format: "%d:%02d", m, s)
+    }
+
+    static func wholeNumber(_ value: Double) -> String {
+        "\(Int(value.rounded()))"
+    }
 }
