@@ -30,8 +30,28 @@ struct ActiveNavigationView: View {
                     overlay(ride, recorder)
                         .tag(0)
                     ForEach(Array(customization.dataPages.enumerated()), id: \.element.id) { index, page in
-                        RideDataPageView(page: page, recorder: recorder, ride: ride)
-                            .tag(index + 1)
+                        RideDataPageView(
+                            page: page,
+                            recorder: recorder,
+                            ride: ride,
+                            onUpdate: { updated in
+                                var c = customization
+                                c.dataPages[index] = updated
+                                appModel.updateCustomization(c)
+                            },
+                            onDeletePage: customization.dataPages.count > 1 ? {
+                                var c = customization
+                                c.dataPages.remove(at: index)
+                                appModel.updateCustomization(c)
+                                pageIndex = min(pageIndex, c.dataPages.count)
+                            } : nil,
+                            onAddPage: customization.dataPages.count < RideScreenCustomization.maxDataPages ? {
+                                var c = customization
+                                c.dataPages.append(RideDataPage(metrics: [.currentSpeed]))
+                                appModel.updateCustomization(c)
+                            } : nil
+                        )
+                        .tag(index + 1)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .always))
