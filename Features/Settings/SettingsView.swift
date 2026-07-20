@@ -41,6 +41,14 @@ struct SettingsView: View {
             Picker("Surface pickiness", selection: profileBinding(\.surfaceSensitivity)) {
                 ForEach(SurfaceSensitivity.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
+            Stepper(value: profileBinding(\.weightKg), in: 40...150, step: 1) {
+                HStack {
+                    Text("Weight")
+                    Spacer()
+                    Text("\(Int(appModel.riderProfile.weightKg)) kg")
+                        .foregroundStyle(.secondary)
+                }
+            }
         } header: {
             Text("Rider profile")
         } footer: {

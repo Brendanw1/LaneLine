@@ -22,6 +22,8 @@ struct RiderProfile: Identifiable, Codable, Equatable {
     var surfaceSensitivity: SurfaceSensitivity
     var appleMusicEnabled: Bool
     var defaultRidePlaylistID: String?
+    /// Used for calorie estimation; kilograms.
+    var weightKg: Double
 
     init(
         id: UUID = UUID(),
@@ -32,7 +34,8 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         directnessPreference: DirectnessPreference = .balanced,
         surfaceSensitivity: SurfaceSensitivity = .moderate,
         appleMusicEnabled: Bool = false,
-        defaultRidePlaylistID: String? = nil
+        defaultRidePlaylistID: String? = nil,
+        weightKg: Double = 75
     ) {
         self.id = id
         self.name = name
@@ -43,6 +46,22 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         self.surfaceSensitivity = surfaceSensitivity
         self.appleMusicEnabled = appleMusicEnabled
         self.defaultRidePlaylistID = defaultRidePlaylistID
+        self.weightKg = weightKg
+    }
+
+    /// Custom decoding so profiles saved before `weightKg` existed still load.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        bikeType = try c.decode(BikeType.self, forKey: .bikeType)
+        hillTolerance = try c.decode(HillTolerance.self, forKey: .hillTolerance)
+        safetyPreference = try c.decode(SafetyPreference.self, forKey: .safetyPreference)
+        directnessPreference = try c.decode(DirectnessPreference.self, forKey: .directnessPreference)
+        surfaceSensitivity = try c.decode(SurfaceSensitivity.self, forKey: .surfaceSensitivity)
+        appleMusicEnabled = try c.decode(Bool.self, forKey: .appleMusicEnabled)
+        defaultRidePlaylistID = try c.decodeIfPresent(String.self, forKey: .defaultRidePlaylistID)
+        weightKg = try c.decodeIfPresent(Double.self, forKey: .weightKg) ?? 75
     }
 }
 
