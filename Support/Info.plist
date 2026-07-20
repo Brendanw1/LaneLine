@@ -26,6 +26,8 @@
 	<string>LaneLine shows your Apple Music now playing info and ride playlists on the navigation screen so you can control music without leaving turn-by-turn guidance.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>LaneLine uses your location to plan bike routes from where you are and to guide you turn by turn while riding.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>LaneLine uses the barometer to measure climbing and descent accurately during rides.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
