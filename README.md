@@ -42,7 +42,7 @@ Xcode, and hit Run. First install only:
 
 1. On the phone, trust the developer profile under
    *Settings → General → VPN & Device Management*.
-2. Grant location and media permissions when the app asks.
+2. Grant location, motion, and media permissions when the app asks.
 3. Voice guidance speaks over your music (it ducks, then restores); the
    ride screen keeps the display awake while navigating.
 
@@ -78,9 +78,13 @@ Services/
   Routing/          RouteGraph, A* planner, cost model, metrics, explanations
   AppleMusic/       MusicKit service (auth, subscription, playback, playlists)
   Location/         CLLocationManager wrapper + mock
+  RideRecording/    RideRecorder (1 Hz sampling), RideAggregator (pure metrics
+                    math), CyclingPowerModel (calorie physics), RideStore
+                    (JSON-per-ride persistence), AltimeterService (barometer)
   Persistence/      UserDefaults-backed store behind a protocol
 Features/       One folder per screen flow (Onboarding, Search, RoutePlanning,
-                RouteComparison, RouteDetail, Navigation, SavedPlaces, Settings)
+                RouteComparison, RouteDetail, Navigation, RideSummary,
+                RideHistory, SavedPlaces, Settings)
 DesignSystem/   Colors, typography, shared components, elevation chart,
                 Liquid Glass adoption layer (iOS 26+, material fallback)
 Resources/      SFSampleNetwork.json (bundled demo network)
@@ -167,3 +171,5 @@ cover navigation UI.
 | Ride progress during navigation | Live GPS when on-route; sustained off-route drift freezes progress and auto-reroutes from the rider's real position; simulation only when there is no fix at all (simulator/demo) |
 | Voice guidance | Real `AVSpeechSynthesizer` turn-by-turn prompts that duck music during announcements; mute toggle is functional |
 | Persistence | Real UserDefaults-backed store |
+| Ride statistics (speed, elevation, calories) | Real: GPS + barometer through `RideAggregator`; physics-based calorie model; demo mode feeds the same pipeline from the simulated position |
+| Ride recording | Real file-backed `RideStore` (JSON per ride + summaries index in Application Support), 60 s crash checkpoints |
