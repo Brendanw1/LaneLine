@@ -13,6 +13,8 @@ struct ActiveNavigationView: View {
     @State private var ride: ActiveRideModel?
     @State private var showMusicSheet = false
     @State private var camera: MapCameraPosition = .automatic
+    @State private var recorder: RideRecorder?
+    @State private var pageIndex = 0
 
     private var customization: RideScreenCustomization { appModel.rideCustomization }
     private var largerControls: Bool {
@@ -22,9 +24,19 @@ struct ActiveNavigationView: View {
 
     var body: some View {
         ZStack {
-            if let ride {
+            if let ride, let recorder {
                 rideMap(ride)
-                overlay(ride)
+                TabView(selection: $pageIndex) {
+                    overlay(ride, recorder)
+                        .tag(0)
+                    ForEach(Array(customization.dataPages.enumerated()), id: \.element.id) { index, page in
+                        RideDataPageView(page: page, recorder: recorder, ride: ride)
+                            .tag(index + 1)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+                .ignoresSafeArea(edges: .bottom)
             } else {
                 ProgressView()
             }
@@ -46,6 +58,26 @@ struct ActiveNavigationView: View {
             )
             model.start()
             ride = model
+
+            let rideRecorder = RideRecorder(
+                profile: appModel.riderProfile,
+                routeName: route.label.isEmpty ? "Ride" : route.label,
+                startElevationMeters: route.segments.first?.geometry.first?.elevation,
+                locationService: services.locationService,
+                altimeter: AltimeterService(),
+                store: services.rideStore,
+                fallbackSample: { [weak model] in
+                    guard let model else { return nil }
+                    return RideRecorder.FallbackSample(
+                        coordinate: model.currentCoordinate,
+                        speedKmh: model.currentSpeedKmh,
+                        altitudeMeters: model.currentElevationMeters
+                    )
+                }
+            )
+            rideRecorder.start()
+            recorder = rideRecorder
+
             // A mounted phone must not lock mid-ride.
             UIApplication.shared.isIdleTimerDisabled = true
             if musicEnabled && customization.musicTrayDefaultExpanded {
@@ -54,6 +86,7 @@ struct ActiveNavigationView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
+            if let recorder, recorder.isRecording { _ = recorder.finish() }
             ride?.end()
         }
     }
@@ -95,7 +128,7 @@ struct ActiveNavigationView: View {
 
     // MARK: Overlay stack
 
-    private func overlay(_ ride: ActiveRideModel) -> some View {
+    private func overlay(_ ride: ActiveRideModel, _ recorder: RideRecorder) -> some View {
         VStack(spacing: LaneLineDesign.Spacing.small) {
             RideGlassContainer {
                 VStack(spacing: LaneLineDesign.Spacing.small) {
@@ -108,7 +141,7 @@ struct ActiveNavigationView: View {
             RideGlassContainer {
                 VStack(spacing: LaneLineDesign.Spacing.small) {
                     if customization.layoutMode != .standard || !customization.visibleSecondaryMetrics.isEmpty {
-                        secondaryMetricsRow(ride)
+                        secondaryMetricsRow(ride, recorder)
                     }
                     metricsBar(ride)
 
@@ -210,7 +243,7 @@ struct ActiveNavigationView: View {
         }
     }
 
-    private func secondaryMetricsRow(_ ride: ActiveRideModel) -> some View {
+    private func secondaryMetricsRow(_ ride: ActiveRideModel, _ recorder: RideRecorder) -> some View {
         HStack(spacing: LaneLineDesign.Spacing.medium) {
             if customization.visibleSecondaryMetrics.contains(.currentGrade) {
                 secondaryChip(
@@ -237,25 +270,20 @@ struct ActiveNavigationView: View {
             if customization.visibleSecondaryMetrics.contains(.currentSpeed) {
                 secondaryChip(
                     icon: "speedometer",
-                    text: String(format: "%.0f km/h", ride.currentSpeedKmh),
+                    text: String(format: "%.0f km/h", recorder.currentSpeedKmh),
                     tint: .primary
                 )
             }
             if customization.visibleSecondaryMetrics.contains(.averageSpeed) {
                 secondaryChip(
                     icon: "gauge.medium",
-                    text: averageSpeedText(ride),
+                    text: recorder.movingSeconds > 10
+                        ? String(format: "%.0f km/h", recorder.averageSpeedKmh) : "—",
                     tint: .primary
                 )
             }
             Spacer()
         }
-    }
-
-    private func averageSpeedText(_ ride: ActiveRideModel) -> String {
-        guard ride.elapsedSeconds > 10 else { return "—" }
-        let kmh = ride.progressMeters / ride.elapsedSeconds * 3.6
-        return String(format: "%.0f km/h", kmh)
     }
 
     private func secondaryChip(icon: String, text: String, tint: Color) -> some View {
@@ -289,6 +317,7 @@ struct ActiveNavigationView: View {
                 label: ride.isPaused ? "Resume" : "Pause"
             ) {
                 ride.togglePause()
+                recorder?.setPaused(ride.isPaused)
             }
 
             Button {

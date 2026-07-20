@@ -33,7 +33,7 @@ final class ActiveRideModel {
     var isComplete: Bool { remainingMeters < 10 }
 
     var currentCoordinate: CLLocationCoordinate2D {
-        point(at: progressMeters)?.coordinate.clCoordinate
+        interpolatedPosition(at: progressMeters)?.coordinate
             ?? route.allCoordinates.first
             ?? CLLocationCoordinate2D(latitude: 37.7702, longitude: -122.4270)
     }
@@ -46,6 +46,12 @@ final class ActiveRideModel {
             from: current.coordinate.clCoordinate,
             to: ahead.coordinate.clCoordinate
         )
+    }
+
+    /// Route elevation at the current position — the demo/no-fix fallback
+    /// altitude for ride recording.
+    var currentElevationMeters: Double? {
+        interpolatedPosition(at: progressMeters)?.elevation
     }
 
     var currentSegment: RouteSegment? {
@@ -168,6 +174,35 @@ final class ActiveRideModel {
     private func point(at distance: Double) -> FlattenedPoint? {
         guard !flattened.isEmpty else { return nil }
         return flattened.last(where: { $0.cumulative <= distance }) ?? flattened.first
+    }
+
+    /// Position lerped between route vertices. Vertices in the sample
+    /// network can sit hundreds of meters apart, so snapping to the last
+    /// vertex would make the simulated position (and everything fed from
+    /// it — the map dot, demo ride recording) advance in giant hops.
+    private func interpolatedPosition(
+        at distance: Double
+    ) -> (coordinate: CLLocationCoordinate2D, elevation: Double?)? {
+        guard let lower = point(at: distance) else { return nil }
+        guard let upper = flattened.first(where: { $0.cumulative > distance }),
+              upper.cumulative > lower.cumulative else {
+            return (lower.coordinate.clCoordinate, lower.coordinate.elevation)
+        }
+        let fraction = (distance - lower.cumulative) / (upper.cumulative - lower.cumulative)
+        let f = min(1, max(0, fraction))
+        let coordinate = CLLocationCoordinate2D(
+            latitude: lower.coordinate.latitude
+                + (upper.coordinate.latitude - lower.coordinate.latitude) * f,
+            longitude: lower.coordinate.longitude
+                + (upper.coordinate.longitude - lower.coordinate.longitude) * f
+        )
+        let elevation: Double?
+        if let a = lower.coordinate.elevation, let b = upper.coordinate.elevation {
+            elevation = a + (b - a) * f
+        } else {
+            elevation = lower.coordinate.elevation
+        }
+        return (coordinate, elevation)
     }
 
     // MARK: Lifecycle
