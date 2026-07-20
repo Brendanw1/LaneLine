@@ -46,6 +46,9 @@ targets:
         NSLocationWhenInUseUsageDescription: >-
           LaneLine uses your location to plan bike routes from where you are
           and to guide you turn by turn while riding.
+        NSMotionUsageDescription: >-
+          LaneLine uses the barometer to measure climbing and descent
+          accurately during rides.
         UIBackgroundModes:
           - audio
           - location
