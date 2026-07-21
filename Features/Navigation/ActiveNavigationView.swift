@@ -15,6 +15,7 @@ struct ActiveNavigationView: View {
     @State private var camera: MapCameraPosition = .automatic
     @State private var recorder: RideRecorder?
     @State private var pageIndex = 0
+    @State private var destinationRacks: [BikeParkingRack] = []
 
     private var customization: RideScreenCustomization { appModel.rideCustomization }
     private var largerControls: Bool {
@@ -100,6 +101,13 @@ struct ActiveNavigationView: View {
 
             // A mounted phone must not lock mid-ride.
             UIApplication.shared.isIdleTimerDisabled = true
+
+            if let destination = route.allCoordinates.last {
+                Task {
+                    destinationRacks = await services.bikeParkingService
+                        .racks(near: destination, limit: 3)
+                }
+            }
             if musicEnabled && customization.musicTrayDefaultExpanded {
                 showMusicSheet = true
             }
@@ -123,6 +131,18 @@ struct ActiveNavigationView: View {
                             : LaneLineDesign.Colors.primary,
                         style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round)
                     )
+            }
+            // Bike parking near the destination, revealed on final approach.
+            if ride.remainingMeters < 300 {
+                ForEach(destinationRacks) { rack in
+                    Annotation(rack.name, coordinate: rack.coordinate) {
+                        Image(systemName: "parkingsign.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, LaneLineDesign.Colors.primary)
+                            .shadow(radius: 2)
+                    }
+                }
             }
             Annotation("", coordinate: ride.currentCoordinate) {
                 ZStack {

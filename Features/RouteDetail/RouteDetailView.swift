@@ -6,7 +6,10 @@ import MapKit
 /// what was rewarded or penalized.
 struct RouteDetailView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(\.services) private var services
     let route: RouteCandidate
+
+    @State private var destinationRacks: [BikeParkingRack] = []
 
     private let explanationBuilder = RouteExplanationBuilder()
 
@@ -20,6 +23,9 @@ struct RouteDetailView: View {
                 headerCard
                 explanationCard
                 elevationCard
+                if !destinationRacks.isEmpty {
+                    bikeParkingCard
+                }
                 segmentsCard
                 if let breakdown = route.scoreBreakdown {
                     scoreCard(breakdown)
@@ -34,6 +40,54 @@ struct RouteDetailView: View {
         .background(LaneLineDesign.Colors.background)
         .navigationTitle(route.label)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard let destination = route.allCoordinates.last else { return }
+            destinationRacks = await services.bikeParkingService.racks(near: destination, limit: 4)
+        }
+    }
+
+    // MARK: Bike parking
+
+    private var bikeParkingCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.small) {
+                Label("Bike parking at destination", systemImage: "parkingsign.circle")
+                    .font(LaneLineDesign.Typography.sectionHeader)
+                    .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+
+                ForEach(Array(destinationRacks.enumerated()), id: \.element.id) { index, rack in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(rack.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+                                .lineLimit(1)
+                            Text(rackDetail(rack))
+                                .font(LaneLineDesign.Typography.caption)
+                                .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                        }
+                        Spacer()
+                        if let destination = route.allCoordinates.last {
+                            Text(RideFormat.distance(
+                                GeoMath.distanceMeters(from: rack.coordinate, to: destination)
+                            ))
+                            .font(LaneLineDesign.Typography.caption)
+                            .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                        }
+                    }
+                    if index < destinationRacks.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+        }
+    }
+
+    private func rackDetail(_ rack: BikeParkingRack) -> String {
+        var parts = ["\(rack.spaces) spaces"]
+        if let placement = rack.placement { parts.append(placement.lowercased()) }
+        if rack.name != rack.address, !rack.address.isEmpty { parts.append(rack.address) }
+        return parts.joined(separator: " · ")
     }
 
     // MARK: Map

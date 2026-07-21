@@ -14,6 +14,7 @@ final class ServiceContainer {
     let musicService: any MusicServicing
     let persistenceService: any PersistenceServiceProtocol
     let rideStore: any RideStoring
+    let bikeParkingService: any BikeParkingServicing
 
     init(
         geospatialService: (any GeospatialDataServiceProtocol)? = nil,
@@ -22,7 +23,8 @@ final class ServiceContainer {
         locationService: (any LocationServicing)? = nil,
         musicService: (any MusicServicing)? = nil,
         persistenceService: any PersistenceServiceProtocol = PersistenceService(),
-        rideStore: any RideStoring = RideStore()
+        rideStore: any RideStoring = RideStore(),
+        bikeParkingService: any BikeParkingServicing = BikeParkingService()
     ) {
         let geospatial = geospatialService ?? GeospatialDataService()
         self.geospatialService = geospatial
@@ -33,6 +35,7 @@ final class ServiceContainer {
         self.musicService = musicService ?? AppleMusicService()
         self.persistenceService = persistenceService
         self.rideStore = rideStore
+        self.bikeParkingService = bikeParkingService
     }
 
     static func live() -> ServiceContainer {
