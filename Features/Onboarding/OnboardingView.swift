@@ -249,7 +249,7 @@ private struct AppleMusicStep: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, LaneLineDesign.Spacing.xlarge)
 
-            MusicConnectionStatusView(state: music.connectionState)
+            MusicConnectionStatusView(state: music.connectionState, errorMessage: music.lastErrorMessage)
 
             if music.connectionState == .notDetermined {
                 Button {
@@ -276,21 +276,35 @@ private struct AppleMusicStep: View {
 /// Shared connected / not-authorized / no-subscription indicator.
 struct MusicConnectionStatusView: View {
     let state: AppleMusicConnectionState
+    /// Set when `.authorizedNoSubscription` actually came from a failed
+    /// subscription check (network, account, or missing MusicKit
+    /// capability) rather than a genuine no-subscription account, so the
+    /// two don't look identical to the rider.
+    var errorMessage: String? = nil
 
     var body: some View {
-        HStack(spacing: LaneLineDesign.Spacing.small) {
-            Circle()
-                .fill(color)
-                .frame(width: 10, height: 10)
-            Text(label)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: LaneLineDesign.Spacing.small) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 10, height: 10)
+                Text(label)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+            }
+            .padding(.horizontal, LaneLineDesign.Spacing.medium)
+            .padding(.vertical, LaneLineDesign.Spacing.small)
+            .background(LaneLineDesign.Colors.surfaceSecondary)
+            .clipShape(Capsule())
+            .accessibilityElement(children: .combine)
+
+            if state == .authorizedNoSubscription, let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(LaneLineDesign.Colors.danger)
+                    .padding(.horizontal, LaneLineDesign.Spacing.medium)
+            }
         }
-        .padding(.horizontal, LaneLineDesign.Spacing.medium)
-        .padding(.vertical, LaneLineDesign.Spacing.small)
-        .background(LaneLineDesign.Colors.surfaceSecondary)
-        .clipShape(Capsule())
-        .accessibilityElement(children: .combine)
     }
 
     private var color: Color {

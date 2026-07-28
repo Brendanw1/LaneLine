@@ -24,6 +24,8 @@ struct RiderProfile: Identifiable, Codable, Equatable {
     var defaultRidePlaylistID: String?
     /// Used for calorie estimation; kilograms.
     var weightKg: Double
+    /// Whether completed rides are logged to Apple Health as workouts.
+    var healthKitEnabled: Bool
 
     init(
         id: UUID = UUID(),
@@ -35,7 +37,8 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         surfaceSensitivity: SurfaceSensitivity = .moderate,
         appleMusicEnabled: Bool = false,
         defaultRidePlaylistID: String? = nil,
-        weightKg: Double = 75
+        weightKg: Double = 75,
+        healthKitEnabled: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -47,9 +50,11 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         self.appleMusicEnabled = appleMusicEnabled
         self.defaultRidePlaylistID = defaultRidePlaylistID
         self.weightKg = weightKg
+        self.healthKitEnabled = healthKitEnabled
     }
 
-    /// Custom decoding so profiles saved before `weightKg` existed still load.
+    /// Custom decoding so profiles saved before `weightKg`/`healthKitEnabled`
+    /// existed still load.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -62,6 +67,7 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         appleMusicEnabled = try c.decode(Bool.self, forKey: .appleMusicEnabled)
         defaultRidePlaylistID = try c.decodeIfPresent(String.self, forKey: .defaultRidePlaylistID)
         weightKg = try c.decodeIfPresent(Double.self, forKey: .weightKg) ?? 75
+        healthKitEnabled = try c.decodeIfPresent(Bool.self, forKey: .healthKitEnabled) ?? false
     }
 }
 

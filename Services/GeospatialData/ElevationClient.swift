@@ -42,35 +42,66 @@ struct OpenMeteoElevationClient: ElevationProviding {
         try await elevationsMeters(at: [coordinate]).first ?? nil
     }
 
+    /// Batches run concurrently (bounded) rather than one-at-a-time — a
+    /// cold-cache citywide ingestion can be dozens of 100-coordinate
+    /// batches, and sequential round-trips made that the dominant cost.
+    private static let maxConcurrentBatches = 6
+
     func elevationsMeters(at coordinates: [CLLocationCoordinate2D]) async throws -> [Double?] {
-        var results: [Double?] = []
-        results.reserveCapacity(coordinates.count)
+        guard !coordinates.isEmpty else { return [] }
 
-        for start in stride(from: 0, to: coordinates.count, by: Self.batchLimit) {
-            let chunk = coordinates[start..<min(start + Self.batchLimit, coordinates.count)]
-            var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
-            components.queryItems = [
-                URLQueryItem(
-                    name: "latitude",
-                    value: chunk.map { String(format: "%.5f", $0.latitude) }.joined(separator: ",")
-                ),
-                URLQueryItem(
-                    name: "longitude",
-                    value: chunk.map { String(format: "%.5f", $0.longitude) }.joined(separator: ",")
-                ),
-            ]
+        let batches: [(start: Int, chunk: [CLLocationCoordinate2D])] = stride(
+            from: 0, to: coordinates.count, by: Self.batchLimit
+        ).map { start in
+            (start, Array(coordinates[start..<min(start + Self.batchLimit, coordinates.count)]))
+        }
 
-            let (data, response) = try await session.data(from: components.url!)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                throw GeospatialDataError.badResponse(source: "Open-Meteo elevation")
+        var results = [Double?](repeating: nil, count: coordinates.count)
+
+        try await withThrowingTaskGroup(of: (Int, [Double?]).self) { group in
+            var nextIndex = 0
+            func submitNext() {
+                guard nextIndex < batches.count else { return }
+                let batch = batches[nextIndex]
+                nextIndex += 1
+                group.addTask {
+                    (batch.start, try await self.fetchBatch(batch.chunk))
+                }
             }
-            let decoded = try JSONDecoder().decode(Response.self, from: data)
-            guard decoded.elevation.count == chunk.count else {
-                throw GeospatialDataError.badResponse(source: "Open-Meteo elevation")
+            for _ in 0..<min(Self.maxConcurrentBatches, batches.count) { submitNext() }
+
+            while let (start, values) = try await group.next() {
+                for (offset, value) in values.enumerated() {
+                    results[start + offset] = value
+                }
+                submitNext()
             }
-            results.append(contentsOf: decoded.elevation.map { $0 })
         }
         return results
+    }
+
+    private func fetchBatch(_ chunk: [CLLocationCoordinate2D]) async throws -> [Double?] {
+        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(
+                name: "latitude",
+                value: chunk.map { String(format: "%.5f", $0.latitude) }.joined(separator: ",")
+            ),
+            URLQueryItem(
+                name: "longitude",
+                value: chunk.map { String(format: "%.5f", $0.longitude) }.joined(separator: ",")
+            ),
+        ]
+
+        let (data, response) = try await session.data(from: components.url!)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw GeospatialDataError.badResponse(source: "Open-Meteo elevation")
+        }
+        let decoded = try JSONDecoder().decode(Response.self, from: data)
+        guard decoded.elevation.count == chunk.count else {
+            throw GeospatialDataError.badResponse(source: "Open-Meteo elevation")
+        }
+        return decoded.elevation.map { $0 }
     }
 }
 

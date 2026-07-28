@@ -20,6 +20,9 @@ struct RouteCandidate: Identifiable, Codable, Equatable {
     var recommendationReason: String
     var cautionNotes: [String]
     var scoreBreakdown: RouteScoreBreakdown?
+    /// Estimated metabolic kilocalories for this rider on this route, from
+    /// the same physics model used to total calories during a recorded ride.
+    var estimatedCalories: Double
 
     // MARK: - Computed Properties
 
@@ -66,7 +69,8 @@ struct RouteCandidate: Identifiable, Codable, Equatable {
         confidenceScore: Double = 1.0,
         recommendationReason: String = "",
         cautionNotes: [String] = [],
-        scoreBreakdown: RouteScoreBreakdown? = nil
+        scoreBreakdown: RouteScoreBreakdown? = nil,
+        estimatedCalories: Double = 0
     ) {
         self.id = id
         self.label = label
@@ -85,5 +89,6 @@ struct RouteCandidate: Identifiable, Codable, Equatable {
         self.recommendationReason = recommendationReason
         self.cautionNotes = cautionNotes
         self.scoreBreakdown = scoreBreakdown
+        self.estimatedCalories = estimatedCalories
     }
 }

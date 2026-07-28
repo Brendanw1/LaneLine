@@ -12,6 +12,7 @@ final class ServiceContainer {
     let scoringService: any RouteScoringServiceProtocol
     let locationService: any LocationServicing
     let musicService: any MusicServicing
+    let healthKitService: any HealthKitServicing
     let persistenceService: any PersistenceServiceProtocol
     let rideStore: any RideStoring
     let bikeParkingService: any BikeParkingServicing
@@ -22,6 +23,7 @@ final class ServiceContainer {
         scoringService: any RouteScoringServiceProtocol = RouteScoringService(),
         locationService: (any LocationServicing)? = nil,
         musicService: (any MusicServicing)? = nil,
+        healthKitService: (any HealthKitServicing)? = nil,
         persistenceService: any PersistenceServiceProtocol = PersistenceService(),
         rideStore: any RideStoring = RideStore(),
         bikeParkingService: any BikeParkingServicing = BikeParkingService()
@@ -33,6 +35,7 @@ final class ServiceContainer {
         self.scoringService = scoringService
         self.locationService = locationService ?? LocationService()
         self.musicService = musicService ?? AppleMusicService()
+        self.healthKitService = healthKitService ?? HealthKitService()
         self.persistenceService = persistenceService
         self.rideStore = rideStore
         self.bikeParkingService = bikeParkingService
@@ -42,11 +45,13 @@ final class ServiceContainer {
         ServiceContainer()
     }
 
-    /// Mocked location + music, real routing over the bundled sample network.
+    /// Mocked location + music + Health, real routing over the bundled
+    /// sample network.
     static func preview() -> ServiceContainer {
         ServiceContainer(
             locationService: MockLocationService(),
-            musicService: MockMusicService()
+            musicService: MockMusicService(),
+            healthKitService: MockHealthKitService()
         )
     }
 }

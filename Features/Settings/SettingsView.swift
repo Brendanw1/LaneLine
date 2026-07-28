@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.services) private var services
+    @Environment(\.openURL) private var openURL
 
     @State private var networkSourceLabel = ""
     @State private var isIngesting = false
@@ -13,6 +15,7 @@ struct SettingsView: View {
             Form {
                 riderProfileSection
                 appleMusicSection
+                healthKitSection
                 rideScreenSection
                 dataSection
                 aboutSection
@@ -41,11 +44,11 @@ struct SettingsView: View {
             Picker("Surface pickiness", selection: profileBinding(\.surfaceSensitivity)) {
                 ForEach(SurfaceSensitivity.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
-            Stepper(value: profileBinding(\.weightKg), in: 40...150, step: 1) {
+            Stepper(value: weightLbsBinding, in: 88...330, step: 1) {
                 HStack {
                     Text("Weight")
                     Spacer()
-                    Text("\(Int(appModel.riderProfile.weightKg)) kg")
+                    Text("\(Int(weightLbsBinding.wrappedValue)) lb")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -67,7 +70,7 @@ struct SettingsView: View {
             HStack {
                 Text("Status")
                 Spacer()
-                MusicConnectionStatusView(state: music.connectionState)
+                MusicConnectionStatusView(state: music.connectionState, errorMessage: music.lastErrorMessage)
             }
 
             if music.connectionState == .notDetermined {
@@ -78,6 +81,15 @@ struct SettingsView: View {
                 Text("Enable access in iOS Settings → Privacy → Media & Apple Music.")
                     .font(.caption)
                     .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                }
+            } else if music.connectionState == .authorizedNoSubscription {
+                Button("Check Apple Music status again") {
+                    Task { await music.refreshConnectionState() }
+                }
             }
 
             if !music.ridePlaylists.isEmpty || appModel.riderProfile.defaultRidePlaylistID != nil {
@@ -95,6 +107,65 @@ struct SettingsView: View {
         } header: {
             Text("Apple Music")
         }
+    }
+
+    // MARK: Apple Health
+
+    private var healthKitSection: some View {
+        let health = services.healthKitService
+
+        return Section {
+            Toggle("Log rides to Apple Health", isOn: healthKitToggleBinding)
+
+            HStack {
+                Text("Status")
+                Spacer()
+                Text(healthStatusLabel(health.authorizationState))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let error = health.lastErrorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(LaneLineDesign.Colors.danger)
+            }
+
+            if health.authorizationState == .denied {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        openURL(url)
+                    }
+                }
+            }
+        } header: {
+            Text("Apple Health")
+        } footer: {
+            Text("Saves distance, duration, calories, and route as a cycling workout each time you save a ride. Write-only — LaneLine never reads your Health data.")
+        }
+    }
+
+    private func healthStatusLabel(_ state: HealthKitAuthorizationState) -> String {
+        switch state {
+        case .authorized: return "Connected"
+        case .denied: return "Access denied"
+        case .notDetermined: return "Not connected"
+        }
+    }
+
+    /// Requests HealthKit authorization the first time this is turned on;
+    /// the toggle otherwise just reflects the rider's preference.
+    private var healthKitToggleBinding: Binding<Bool> {
+        Binding(
+            get: { appModel.riderProfile.healthKitEnabled },
+            set: { newValue in
+                var profile = appModel.riderProfile
+                profile.healthKitEnabled = newValue
+                appModel.updateProfile(profile)
+                if newValue, services.healthKitService.authorizationState == .notDetermined {
+                    Task { await services.healthKitService.requestAuthorization() }
+                }
+            }
+        )
     }
 
     // MARK: Ride screen
@@ -153,7 +224,7 @@ struct SettingsView: View {
             HStack {
                 Text("Version")
                 Spacer()
-                Text("1.0.0 (Alpha)")
+                Text(appVersionLabel)
                     .foregroundStyle(LaneLineDesign.Colors.textSecondary)
             }
             HStack {
@@ -163,6 +234,13 @@ struct SettingsView: View {
                     .foregroundStyle(LaneLineDesign.Colors.textSecondary)
             }
         }
+    }
+
+    private var appVersionLabel: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
     }
 
     // MARK: Helpers
@@ -183,6 +261,19 @@ struct SettingsView: View {
 
     private var playlistBinding: Binding<String?> {
         profileBinding(\.defaultRidePlaylistID)
+    }
+
+    /// `RiderProfile.weightKg` stays in kilograms — the power/calorie model
+    /// is SI-based — this only converts at the display boundary.
+    private var weightLbsBinding: Binding<Double> {
+        Binding(
+            get: { (appModel.riderProfile.weightKg * 2.20462).rounded() },
+            set: { newValue in
+                var profile = appModel.riderProfile
+                profile.weightKg = newValue / 2.20462
+                appModel.updateProfile(profile)
+            }
+        )
     }
 
     private func refreshNetworkSource() async {

@@ -36,6 +36,8 @@ targets:
       path: Support/Info.plist
       properties:
         CFBundleDisplayName: LaneLine
+        CFBundleShortVersionString: "1.1.0"
+        CFBundleVersion: "2"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -49,10 +51,19 @@ targets:
         NSMotionUsageDescription: >-
           LaneLine uses the barometer to measure climbing and descent
           accurately during rides.
+        NSHealthUpdateUsageDescription: >-
+          LaneLine saves completed rides to Health as cycling workouts —
+          distance, duration, calories, and route. It never reads your
+          Health data.
         UIBackgroundModes:
           - audio
           - location
         ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: Support/LaneLine.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     scheme:
       testTargets:
         - LaneLineTests

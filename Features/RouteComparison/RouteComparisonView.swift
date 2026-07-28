@@ -125,6 +125,24 @@ struct RouteCandidateCard: View {
                 }
 
                 HStack(spacing: LaneLineDesign.Spacing.large) {
+                    MetricTile(
+                        label: "Bike facility",
+                        value: RideFormat.percent(candidate.bikeFacilityPercent),
+                        icon: "bicycle"
+                    )
+                    MetricTile(
+                        label: "Directness",
+                        value: RideFormat.percent(candidate.directnessScore),
+                        icon: "arrow.triangle.swap"
+                    )
+                    MetricTile(
+                        label: "Calories",
+                        value: "\(RideFormat.wholeNumber(candidate.estimatedCalories)) kcal",
+                        icon: "flame.fill"
+                    )
+                }
+
+                HStack(spacing: LaneLineDesign.Spacing.large) {
                     QualityIndicator(value: candidate.roadBikeSuitabilityScore, label: "Road-bike fit")
                     QualityIndicator(value: candidate.routeStressScore, label: "Stress", higherIsBetter: false)
                     QualityIndicator(value: candidate.confidenceScore, label: "Confidence")

@@ -46,6 +46,19 @@ struct RouteMetricsCalculator {
         let crowDistance = GeoMath.distanceMeters(from: origin, to: destination)
         let directness = totalLength > 0 ? min(1, crowDistance / totalLength) : 0
 
+        let mechanicalJoules = edges.reduce(0.0) { total, edge in
+            let seconds = CyclingSpeedModel.traversalSeconds(
+                lengthMeters: edge.lengthMeters, grade: edge.grade, bikeType: profile.bikeType
+            )
+            let speedMs = edge.lengthMeters / max(0.1, seconds)
+            let watts = CyclingPowerModel.mechanicalWatts(
+                speedMs: speedMs, gradeDecimal: edge.grade,
+                riderKg: profile.weightKg, bikeType: profile.bikeType
+            )
+            return total + watts * seconds
+        }
+        let estimatedCalories = CyclingPowerModel.kilocalories(mechanicalJoules: mechanicalJoules)
+
         return RouteCandidate(
             label: strategy.displayName,
             strategyType: strategy,
@@ -59,7 +72,8 @@ struct RouteMetricsCalculator {
             roadBikeSuitabilityScore: roadBikeSuitability(edges, totalLength: totalLength),
             routeStressScore: stress,
             directnessScore: directness,
-            confidenceScore: confidence
+            confidenceScore: confidence,
+            estimatedCalories: estimatedCalories
         )
     }
 

@@ -79,6 +79,11 @@ struct RootView: View {
                         do { try await services.rideStore.save(final) }
                         catch { appModel.failedRideSave = final }
                     }
+                    if appModel.riderProfile.healthKitEnabled {
+                        // Separate task: a Health write failure shouldn't
+                        // affect the ride-store save or block the UI.
+                        Task { await services.healthKitService.saveWorkout(final) }
+                    }
                 },
                 onDiscard: {
                     Task { await services.rideStore.delete(id: record.id) }
