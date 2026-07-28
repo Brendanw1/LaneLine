@@ -10,42 +10,57 @@ struct RouteDetailView: View {
     let route: RouteCandidate
 
     @State private var destinationRacks: [BikeParkingRack] = []
+    /// True once the docked "Start Ride" button (the real one, at the end of
+    /// the scroll content) has scrolled into view — at that point the
+    /// floating copy hides so the docked one takes over seamlessly.
+    @State private var isDockedButtonVisible = false
 
     private let explanationBuilder = RouteExplanationBuilder()
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.medium) {
-                    segmentMap
-                        .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
+        GeometryReader { screenGeometry in
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.medium) {
+                        segmentMap
+                            .frame(height: 220)
+                            .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
 
-                    headerCard
-                    explanationCard
-                    elevationCard
-                    if !destinationRacks.isEmpty {
-                        bikeParkingCard
+                        headerCard
+                        explanationCard
+                        elevationCard
+                        if !destinationRacks.isEmpty {
+                            bikeParkingCard
+                        }
+                        segmentsCard
+                        if let breakdown = route.scoreBreakdown {
+                            scoreCard(breakdown)
+                        }
+
+                        startRideButton
+                            .background(
+                                GeometryReader { buttonGeometry in
+                                    Color.clear.preference(
+                                        key: DockedButtonPositionKey.self,
+                                        value: buttonGeometry.frame(in: .global).minY
+                                    )
+                                }
+                            )
                     }
-                    segmentsCard
-                    if let breakdown = route.scoreBreakdown {
-                        scoreCard(breakdown)
-                    }
+                    .padding(LaneLineDesign.Spacing.medium)
                 }
-                .padding(LaneLineDesign.Spacing.medium)
-            }
+                .onPreferenceChange(DockedButtonPositionKey.self) { minY in
+                    isDockedButtonVisible = minY < screenGeometry.frame(in: .global).maxY
+                }
 
-            // A fixed footer, not an overlay: the button never shares screen
-            // space with the ScrollView, so there's no dead zone where a
-            // scroll gesture starting near it gets swallowed by its own tap
-            // recognizer. It's still visible the instant the screen appears,
-            // and always at the bottom, without needing to overlap content.
-            Divider()
-            startRideButton
-                .padding(.horizontal, LaneLineDesign.Spacing.medium)
-                .padding(.top, LaneLineDesign.Spacing.small)
-                .padding(.bottom, LaneLineDesign.Spacing.small)
-                .background(LaneLineDesign.Colors.background)
+                if !isDockedButtonVisible {
+                    startRideButton
+                        .padding(.horizontal, LaneLineDesign.Spacing.medium)
+                        .padding(.bottom, LaneLineDesign.Spacing.small)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isDockedButtonVisible)
         }
         .background(LaneLineDesign.Colors.background)
         .navigationTitle(route.label)
@@ -56,6 +71,8 @@ struct RouteDetailView: View {
         }
     }
 
+    /// Immediately clickable the moment this screen appears (floating, until
+    /// the docked copy at the true bottom of the content scrolls into view).
     private var startRideButton: some View {
         StartRideButton(title: "Start Ride", icon: "bicycle") {
             appModel.startRide(route)
@@ -408,6 +425,17 @@ private struct SegmentRow: View {
 extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+// MARK: - Docked button tracking
+
+/// Global-space minY of the docked "Start Ride" button, reported up from
+/// inside the scroll content so the floating copy knows when to hide.
+private struct DockedButtonPositionKey: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

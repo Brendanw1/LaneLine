@@ -56,6 +56,15 @@ struct StartRideButton: View {
         }
         .blur(radius: 6)
         .opacity(0.9)
+        // `.mask()` only clips what's *drawn* — it doesn't shrink this
+        // view's own layout bounds, which are still the oversized `side ×
+        // side` square used so the rotating gradient always covers the
+        // ring. Left as-is, that invisible oversized footprint was still
+        // hit-testable, so a tap/scroll starting well above the visible
+        // ring (up to roughly half the screen) was being swallowed by this
+        // purely decorative layer instead of reaching the button or the
+        // ScrollView underneath it.
+        .allowsHitTesting(false)
     }
 }
 
