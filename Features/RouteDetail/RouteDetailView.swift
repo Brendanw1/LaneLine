@@ -14,28 +14,38 @@ struct RouteDetailView: View {
     private let explanationBuilder = RouteExplanationBuilder()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.medium) {
-                segmentMap
-                    .frame(height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.medium) {
+                    segmentMap
+                        .frame(height: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
 
-                headerCard
-                explanationCard
-                elevationCard
-                if !destinationRacks.isEmpty {
-                    bikeParkingCard
+                    headerCard
+                    explanationCard
+                    elevationCard
+                    if !destinationRacks.isEmpty {
+                        bikeParkingCard
+                    }
+                    segmentsCard
+                    if let breakdown = route.scoreBreakdown {
+                        scoreCard(breakdown)
+                    }
                 }
-                segmentsCard
-                if let breakdown = route.scoreBreakdown {
-                    scoreCard(breakdown)
-                }
-
-                PrimaryButton(title: "Start Ride", icon: "bicycle") {
-                    appModel.startRide(route)
-                }
+                .padding(LaneLineDesign.Spacing.medium)
             }
-            .padding(LaneLineDesign.Spacing.medium)
+
+            // A fixed footer, not an overlay: the button never shares screen
+            // space with the ScrollView, so there's no dead zone where a
+            // scroll gesture starting near it gets swallowed by its own tap
+            // recognizer. It's still visible the instant the screen appears,
+            // and always at the bottom, without needing to overlap content.
+            Divider()
+            startRideButton
+                .padding(.horizontal, LaneLineDesign.Spacing.medium)
+                .padding(.top, LaneLineDesign.Spacing.small)
+                .padding(.bottom, LaneLineDesign.Spacing.small)
+                .background(LaneLineDesign.Colors.background)
         }
         .background(LaneLineDesign.Colors.background)
         .navigationTitle(route.label)
@@ -43,6 +53,12 @@ struct RouteDetailView: View {
         .task {
             guard let destination = route.allCoordinates.last else { return }
             destinationRacks = await services.bikeParkingService.racks(near: destination, limit: 4)
+        }
+    }
+
+    private var startRideButton: some View {
+        StartRideButton(title: "Start Ride", icon: "bicycle") {
+            appModel.startRide(route)
         }
     }
 
