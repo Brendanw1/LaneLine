@@ -9,7 +9,10 @@ struct StubGeospatialService: GeospatialDataServiceProtocol {
     let graph: RouteGraph
 
     func routeGraph(covering bounds: BoundingBox) async throws -> RouteGraph { graph }
-    func ingestLiveNetwork(in bounds: BoundingBox) async throws -> RouteGraph { graph }
+    func ingestLiveNetwork(
+        in bounds: BoundingBox,
+        onProgress: @escaping @Sendable (NetworkIngestionPhase) -> Void = { _ in }
+    ) async throws -> RouteGraph { graph }
     var currentSource: NetworkSource {
         get async { .bundledSample }
     }

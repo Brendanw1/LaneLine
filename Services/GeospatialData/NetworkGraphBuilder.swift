@@ -111,7 +111,8 @@ struct NetworkGraphBuilder {
 
     func buildGraph(
         from rawEdges: [RawNetworkEdge],
-        elevationProvider: (any ElevationProviding)?
+        elevationProvider: (any ElevationProviding)?,
+        onProgress: @Sendable (NetworkIngestionPhase) -> Void = { _ in }
     ) async throws -> RouteGraph {
         var nodeIDsByKey: [String: Int] = [:]
         var nodes: [RouteGraph.Node] = []
@@ -147,20 +148,23 @@ struct NetworkGraphBuilder {
             }
         }
 
-        // Elevation enrichment per unique node, in one batch: city-scale
-        // graphs have tens of thousands of nodes, so per-point queries are
-        // not viable on a phone. Sample-network nodes arrive with elevations
-        // baked in and skip the lookup entirely.
+        // Elevation enrichment per unique node: city-scale graphs have tens
+        // of thousands of nodes, so per-point queries are not viable on a
+        // phone. Sample-network nodes arrive with elevations baked in and
+        // skip the lookup entirely. Chunked (rather than one call for every
+        // pending node) purely so progress can tick live — a multi-minute
+        // "computing elevation" phase with no visible movement reads as a
+        // hang even when it's still working.
         if let elevationProvider {
             let pending = nodes.filter { elevations[$0.id] == nil }
             if !pending.isEmpty {
-                let fetched = try await elevationProvider
-                    .elevationsMeters(at: pending.map(\.coordinate.clCoordinate))
-                for (node, elevation) in zip(pending, fetched) {
-                    if let elevation { elevations[node.id] = elevation }
-                }
+                try await enrichElevations(
+                    for: pending, in: &elevations,
+                    using: elevationProvider, onProgress: onProgress
+                )
             }
         }
+        onProgress(.buildingGraph)
 
         let enrichedNodes = nodes.map { node in
             RouteGraph.Node(
@@ -197,6 +201,49 @@ struct NetworkGraphBuilder {
         }
 
         return RouteGraph(nodes: enrichedNodes, edges: edges)
+    }
+
+    /// Runs `pending` through `elevationProvider` in bounded-concurrency
+    /// chunks, reporting `.computingElevation` after each chunk so the UI has
+    /// something to visibly tick forward instead of one long silent call.
+    private func enrichElevations(
+        for pending: [RouteGraph.Node],
+        in elevations: inout [Int: Double],
+        using elevationProvider: any ElevationProviding,
+        onProgress: @Sendable (NetworkIngestionPhase) -> Void
+    ) async throws {
+        let chunkSize = 300
+        let maxConcurrentChunks = 3
+        let total = pending.count
+        let chunks = stride(from: 0, to: pending.count, by: chunkSize).map {
+            Array(pending[$0..<min($0 + chunkSize, pending.count)])
+        }
+
+        onProgress(.computingElevation(completed: 0, total: total))
+        var completed = 0
+
+        try await withThrowingTaskGroup(of: (Int, [Double?]).self) { group in
+            var nextIndex = 0
+            func submitNext() {
+                guard nextIndex < chunks.count else { return }
+                let index = nextIndex
+                nextIndex += 1
+                let coordinates = chunks[index].map(\.coordinate.clCoordinate)
+                group.addTask {
+                    (index, try await elevationProvider.elevationsMeters(at: coordinates))
+                }
+            }
+            for _ in 0..<min(maxConcurrentChunks, chunks.count) { submitNext() }
+
+            while let (index, values) = try await group.next() {
+                for (node, elevation) in zip(chunks[index], values) {
+                    if let elevation { elevations[node.id] = elevation }
+                }
+                completed += chunks[index].count
+                onProgress(.computingElevation(completed: completed, total: total))
+                submitNext()
+            }
+        }
     }
 
     // MARK: Helpers

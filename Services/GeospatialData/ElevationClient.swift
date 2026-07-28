@@ -13,6 +13,18 @@ protocol ElevationProviding: Sendable {
     func elevationsMeters(at coordinates: [CLLocationCoordinate2D]) async throws -> [Double?]
 }
 
+/// Returns nil for everything, instantly, with no network call. Wrapped by
+/// a `CachingElevationProvider` to get a "cache-only, never fetch live"
+/// elevation source — used when building a city-scale graph automatically
+/// (first launch, no explicit user wait) where a live fetch for every
+/// uncached node would take far too long to be reasonable.
+struct NoOpElevationProvider: ElevationProviding {
+    func elevationMeters(at coordinate: CLLocationCoordinate2D) async throws -> Double? { nil }
+    func elevationsMeters(at coordinates: [CLLocationCoordinate2D]) async throws -> [Double?] {
+        Array(repeating: nil, count: coordinates.count)
+    }
+}
+
 extension ElevationProviding {
     /// Point-only providers fall back to sequential lookups.
     func elevationsMeters(at coordinates: [CLLocationCoordinate2D]) async throws -> [Double?] {
@@ -80,6 +92,14 @@ struct OpenMeteoElevationClient: ElevationProviding {
         return results
     }
 
+    /// A single batch failing (transient status *or* a dropped connection)
+    /// used to throw the whole `withThrowingTaskGroup` call in
+    /// `elevationsMeters`, which `CompositeElevationClient` then treated as
+    /// "the batch source is down" and fell back to sequential single-point
+    /// USGS queries for *every* coordinate in the caller's chunk (up to 300
+    /// here) — not just the one that failed. Retrying here keeps a
+    /// transient hiccup from cascading into thousands of one-at-a-time
+    /// fallback requests.
     private func fetchBatch(_ chunk: [CLLocationCoordinate2D]) async throws -> [Double?] {
         var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
         components.queryItems = [
@@ -93,15 +113,22 @@ struct OpenMeteoElevationClient: ElevationProviding {
             ),
         ]
 
-        let (data, response) = try await session.data(from: components.url!)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        let request = URLRequest(url: components.url!)
+        let data = try await fetchWithTransientRetry(
+            request, session: session, source: "Open-Meteo elevation"
+        )
+        do {
+            let decoded = try JSONDecoder().decode(Response.self, from: data)
+            guard decoded.elevation.count == chunk.count else {
+                throw GeospatialDataError.badResponse(source: "Open-Meteo elevation")
+            }
+            return decoded.elevation.map { $0 }
+        } catch {
+            // A 200 with a body that isn't the expected JSON shape —
+            // surface which service failed instead of Swift's generic
+            // decoding error text ("data couldn't be read...").
             throw GeospatialDataError.badResponse(source: "Open-Meteo elevation")
         }
-        let decoded = try JSONDecoder().decode(Response.self, from: data)
-        guard decoded.elevation.count == chunk.count else {
-            throw GeospatialDataError.badResponse(source: "Open-Meteo elevation")
-        }
-        return decoded.elevation.map { $0 }
     }
 }
 
@@ -121,11 +148,13 @@ struct USGSElevationClient: ElevationProviding {
             URLQueryItem(name: "wkid", value: "4326"),
         ]
 
-        let (data, response) = try await session.data(from: components.url!)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        let request = URLRequest(url: components.url!)
+        let data = try await fetchWithTransientRetry(request, session: session, source: "USGS EPQS")
+        do {
+            return try JSONDecoder().decode(EPQSResponse.self, from: data).value
+        } catch {
             throw GeospatialDataError.badResponse(source: "USGS EPQS")
         }
-        return try JSONDecoder().decode(EPQSResponse.self, from: data).value
     }
 }
 
@@ -147,21 +176,36 @@ struct CompositeElevationClient: ElevationProviding {
 }
 
 /// Disk-persisted elevation cache keyed by ~11 m grid cells. SF terrain does
-/// not change; cache entries never expire.
+/// not change; cache entries never expire. Seeded at init from a bundled
+/// pre-fetched lookup covering the local bikeway network, so that network
+/// (the one that's actually reliable — see `LocalBikewayDataSource`) needs
+/// zero live elevation calls on a fresh install. Live fetches for anything
+/// outside that set (e.g. a full OSM-derived graph, when Overpass
+/// cooperates) still work exactly as before and merge into the same cache.
 actor CachingElevationProvider: ElevationProviding {
     private let upstream: any ElevationProviding
     private var cache: [String: Double]
     private let cacheURL: URL
 
-    init(upstream: any ElevationProviding, cacheDirectory: URL? = nil) {
+    init(upstream: any ElevationProviding, cacheDirectory: URL? = nil, bundle: Bundle = .main) {
         self.upstream = upstream
         let directory = cacheDirectory
             ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         self.cacheURL = directory.appending(path: "elevation-cache.json")
-        self.cache = (try? JSONDecoder().decode(
+
+        var seeded: [String: Double] = [:]
+        if let bundledURL = bundle.url(forResource: "SFBikewayElevations", withExtension: "json"),
+           let bundledCache = try? JSONDecoder().decode(
+               [String: Double].self, from: Data(contentsOf: bundledURL)
+           ) {
+            seeded = bundledCache
+        }
+        let disk = (try? JSONDecoder().decode(
             [String: Double].self,
             from: Data(contentsOf: cacheURL)
         )) ?? [:]
+        seeded.merge(disk) { _, fromDisk in fromDisk }
+        self.cache = seeded
     }
 
     func elevationMeters(at coordinate: CLLocationCoordinate2D) async throws -> Double? {

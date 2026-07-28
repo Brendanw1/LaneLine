@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var networkSourceLabel = ""
     @State private var isIngesting = false
     @State private var ingestionError: String?
+    @State private var ingestionPhase: NetworkIngestionPhase?
 
     var body: some View {
         NavigationStack {
@@ -199,13 +200,19 @@ struct SettingsView: View {
                 if isIngesting {
                     HStack {
                         ProgressView()
-                        Text("Fetching SF bike network…")
+                        Text(ingestionPhase.map(phaseLabel) ?? "Starting…")
                     }
                 } else {
                     Text("Fetch live SF bike network")
                 }
             }
             .disabled(isIngesting)
+
+            if isIngesting {
+                Text("This can take a while on a slow connection or a busy public data server — a stuck spinner with no phase change for a minute or more usually means a request is retrying or timing out, not that the app has frozen.")
+                    .font(.caption)
+                    .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+            }
 
             if let ingestionError {
                 Text(ingestionError)
@@ -283,13 +290,36 @@ struct SettingsView: View {
     private func ingestLiveData() async {
         isIngesting = true
         ingestionError = nil
+        ingestionPhase = nil
         do {
-            _ = try await services.geospatialService.ingestLiveNetwork(in: .sanFrancisco)
+            _ = try await services.geospatialService.ingestLiveNetwork(in: .sanFrancisco) { phase in
+                Task { @MainActor in
+                    ingestionPhase = phase
+                }
+            }
         } catch {
             ingestionError = error.localizedDescription
         }
         await refreshNetworkSource()
         isIngesting = false
+        ingestionPhase = nil
+    }
+
+    private func phaseLabel(_ phase: NetworkIngestionPhase) -> String {
+        switch phase {
+        case .fetchingBikeways:
+            return "Fetching bikeway data…"
+        case .fetchingStreets(let completed, let total):
+            return total > 0
+                ? "Fetching street data (\(completed)/\(total) areas)…"
+                : "Fetching street data…"
+        case .computingElevation(let completed, let total):
+            return completed > 0
+                ? "Computing elevation (\(completed)/\(total) locations)…"
+                : "Computing elevation for \(total) locations…"
+        case .buildingGraph:
+            return "Building routing graph…"
+        }
     }
 }
 

@@ -63,16 +63,24 @@ struct DataSFBikewayClient: BikewayNetworkProviding {
             request.setValue(token, forHTTPHeaderField: "X-App-Token")
         }
 
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        let data = try await fetchWithTransientRetry(request, session: session, source: "DataSF")
+        do {
+            return try JSONDecoder().decode([DataSFBikewayRecord].self, from: data)
+        } catch {
+            // A 200 with a body that isn't the expected JSON shape (HTML
+            // error page, empty body, schema drift) — surface which service
+            // failed instead of Swift's generic decoding error text.
             throw GeospatialDataError.badResponse(source: "DataSF")
         }
-        return try JSONDecoder().decode([DataSFBikewayRecord].self, from: data)
     }
 }
 
 enum GeospatialDataError: Error, LocalizedError {
     case badResponse(source: String)
+    /// The request never got a response at all — dropped connection, DNS
+    /// failure, no route — as opposed to `badResponse`, where a response
+    /// came back but wasn't usable.
+    case connectionFailed(source: String)
     case emptyNetwork
     case sampleDataMissing
 
@@ -80,6 +88,8 @@ enum GeospatialDataError: Error, LocalizedError {
         switch self {
         case .badResponse(let source):
             return "\(source) returned an unexpected response."
+        case .connectionFailed(let source):
+            return "Couldn't connect to \(source). Check your connection and try again."
         case .emptyNetwork:
             return "No street network is available for this area yet."
         case .sampleDataMissing:
