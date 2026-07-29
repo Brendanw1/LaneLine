@@ -7,6 +7,8 @@ forcing an app switch at 18 km/h.
 
 iOS 17+, SwiftUI-first, MusicKit-only music integration.
 
+<img src="docs/screenshots/ride-screen.png" alt="LaneLine active ride screen: turn-by-turn guidance over a live MapKit route, grade and climb readouts, and the Apple Music compact bar with shuffle" width="320">
+
 ## Getting started
 
 The Xcode project is generated — `LaneLine.xcodeproj` is not checked in.
