@@ -47,6 +47,21 @@ enum GeoMath {
         return degrees < 0 ? degrees + 360 : degrees
     }
 
+    /// Wraps to the 0..<360 range, handling any input magnitude (including
+    /// already-accumulated multi-lap deltas).
+    static func normalizedDegrees(_ degrees: Double) -> Double {
+        let wrapped = degrees.truncatingRemainder(dividingBy: 360)
+        return wrapped < 0 ? wrapped + 360 : wrapped
+    }
+
+    /// One exponential-smoothing step from `from` toward `to`, always
+    /// taking the shorter way around the 0/360 boundary (so e.g. 359 -> 1
+    /// rotates forward through 0, not backward through 180).
+    static func interpolatedAngle(from: Double, to: Double, fraction: Double) -> Double {
+        let delta = turnAngleDegrees(fromBearing: from, toBearing: to)
+        return normalizedDegrees(from + delta * fraction)
+    }
+
     /// Signed turn angle in degrees between two bearings, in -180...180.
     /// Negative is a left turn, positive is a right turn.
     static func turnAngleDegrees(fromBearing: Double, toBearing: Double) -> Double {
