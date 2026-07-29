@@ -38,55 +38,56 @@ struct ActiveNavigationView: View {
         ZStack {
             if let ride, let recorder {
                 rideMap(ride)
-                TabView(selection: $pageIndex) {
-                    overlay(ride, recorder)
-                        .tag(0)
-                    ForEach(Array(customization.dataPages.enumerated()), id: \.element.id) { index, page in
-                        RideDataPageView(
-                            page: page,
-                            recorder: recorder,
-                            ride: ride,
-                            onUpdate: { updated in
-                                var c = customization
-                                c.dataPages[index] = updated
-                                appModel.updateCustomization(c)
-                            },
-                            onDeletePage: customization.dataPages.count > 1 ? {
-                                var c = customization
-                                c.dataPages.remove(at: index)
-                                appModel.updateCustomization(c)
-                                pageIndex = min(pageIndex, c.dataPages.count)
-                            } : nil,
-                            onAddPage: customization.dataPages.count < RideScreenCustomization.maxDataPages ? {
-                                var c = customization
-                                c.dataPages.append(RideDataPage(metrics: [.currentSpeed]))
-                                appModel.updateCustomization(c)
-                            } : nil
-                        )
-                        .tag(index + 1)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .always))
-                .indexViewStyle(.page(backgroundDisplayMode: .interactive))
-                .ignoresSafeArea(edges: .bottom)
-                // `TabView` spans the full screen and is backed by a real
-                // UIPageViewController, which — unlike plain SwiftUI empty
-                // space — captures touches across its whole bounds
-                // regardless of whether its current page has visible
-                // content at that point. Sitting in front of the map (it
-                // has to, for its own controls to be tappable), it was
-                // silently absorbing every touch meant for the map below:
-                // the mode-toggle button never received a tap, and map
-                // pan/pinch/rotate in overview mode was very likely never
-                // reaching the map either. Disabling it specifically while
-                // in overview — the one mode where the rider actually wants
-                // to gesture on the map instead of the ride controls — is
-                // what makes both of those work.
-                .allowsHitTesting(mapMode == .follow)
 
-                mapModeToggle(ride)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                    .padding(.trailing, LaneLineDesign.Spacing.medium)
+                // Rendering TabView only in follow mode — not just marking
+                // it non-interactive — is deliberate. It's backed by a real
+                // UIPageViewController; even hit-testing-disabled, it stayed
+                // in the render tree, and something about that (still
+                // uncertain exactly what) kept contesting touches meant for
+                // the map and the toggle button in overview mode: the
+                // toggle didn't reliably work in reverse, and End became
+                // unreachable there entirely. Not rendering it at all during
+                // overview removes any UIKit-bridged sibling from the
+                // hierarchy at that point — nothing left to contest with.
+                if mapMode == .follow {
+                    TabView(selection: $pageIndex) {
+                        overlay(ride, recorder)
+                            .tag(0)
+                        ForEach(Array(customization.dataPages.enumerated()), id: \.element.id) { index, page in
+                            RideDataPageView(
+                                page: page,
+                                recorder: recorder,
+                                ride: ride,
+                                onUpdate: { updated in
+                                    var c = customization
+                                    c.dataPages[index] = updated
+                                    appModel.updateCustomization(c)
+                                },
+                                onDeletePage: customization.dataPages.count > 1 ? {
+                                    var c = customization
+                                    c.dataPages.remove(at: index)
+                                    appModel.updateCustomization(c)
+                                    pageIndex = min(pageIndex, c.dataPages.count)
+                                } : nil,
+                                onAddPage: customization.dataPages.count < RideScreenCustomization.maxDataPages ? {
+                                    var c = customization
+                                    c.dataPages.append(RideDataPage(metrics: [.currentSpeed]))
+                                    appModel.updateCustomization(c)
+                                } : nil
+                            )
+                            .tag(index + 1)
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .always))
+                    .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+                    .ignoresSafeArea(edges: .bottom)
+
+                    mapModeToggle(ride)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                        .padding(.trailing, LaneLineDesign.Spacing.medium)
+                } else {
+                    overviewControls(ride, recorder)
+                }
             } else {
                 ProgressView()
             }
@@ -271,6 +272,39 @@ struct ActiveNavigationView: View {
         .foregroundStyle(LaneLineDesign.Colors.primary)
         .rideGlass(in: Circle(), interactive: true)
         .accessibilityLabel(mapMode == .follow ? "Show whole route" : "Resume turn-by-turn view")
+    }
+
+    /// The only UI shown during overview — no TabView present at all, so
+    /// there's nothing left to contest touches with. Deliberately minimal:
+    /// resume navigation, or end the ride. Everything else (metrics, music)
+    /// is back the moment you resume.
+    private func overviewControls(_ ride: ActiveRideModel, _ recorder: RideRecorder) -> some View {
+        VStack {
+            HStack {
+                Spacer()
+                mapModeToggle(ride)
+            }
+            .padding(.top, LaneLineDesign.Spacing.medium)
+            .padding(.trailing, LaneLineDesign.Spacing.medium)
+
+            Spacer()
+
+            Button {
+                ride.end()
+                let record = recorder.finish()
+                appModel.finishRide(with: record)
+            } label: {
+                Label("End Ride", systemImage: "xmark")
+                    .font(.subheadline.weight(.bold))
+                    .frame(maxWidth: 200)
+                    .frame(height: largerControls
+                        ? LaneLineDesign.HitTarget.large
+                        : LaneLineDesign.HitTarget.comfortable)
+            }
+            .prominentRideButtonStyle(tint: LaneLineDesign.Colors.danger)
+            .padding(.bottom, LaneLineDesign.Spacing.xlarge)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: Overlay stack

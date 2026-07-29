@@ -26,12 +26,13 @@ struct MusicCompactBar: View {
                 artwork(item)
 
                 Button(action: onExpand) {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(item.title)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
                             .lineLimit(1)
                         Text(item.artist)
                             .font(.caption)
+                            .fontWeight(.medium)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -112,17 +113,27 @@ struct MusicCompactBar: View {
 
     @ViewBuilder
     private func artwork(_ item: NowPlayingItem) -> some View {
-        if let url = item.artworkURL {
-            AsyncImage(url: url) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
+        Group {
+            if let url = item.artworkURL {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    artworkPlaceholder
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.medium))
+            } else {
                 artworkPlaceholder
             }
-            .frame(width: 44, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.medium))
-        } else {
-            artworkPlaceholder
         }
+        // A color-matched glow rather than a plain shadow — the art reads
+        // as the source the background color is pooling from, instead of a
+        // hard-edged square sitting on top of it.
+        .shadow(
+            color: .legibleAccent(fromHex: item.artworkBackgroundColorHex, fallback: LaneLineDesign.Colors.primary)
+                .opacity(0.5),
+            radius: 6
+        )
     }
 
     private var artworkPlaceholder: some View {

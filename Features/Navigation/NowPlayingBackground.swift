@@ -22,11 +22,22 @@ struct NowPlayingBackground: View {
     var body: some View {
         Group {
             if compact {
-                LinearGradient(
-                    colors: [baseColor.opacity(0.6), baseColor.opacity(0.25)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                // Pool of color from where the artwork sits, fading out
+                // toward the controls — reads as the album bleeding into
+                // the card rather than a flat tint sitting behind it.
+                ZStack {
+                    LinearGradient(
+                        colors: [baseColor.opacity(0.85), baseColor.opacity(0.4)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    RadialGradient(
+                        colors: [baseColor.opacity(0.65), .clear],
+                        center: .leading,
+                        startRadius: 4,
+                        endRadius: 130
+                    )
+                }
             } else {
                 ZStack {
                     LinearGradient(

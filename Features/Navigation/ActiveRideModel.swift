@@ -44,8 +44,35 @@ final class ActiveRideModel {
     /// which isn't true the moment you glance sideways, walk the bike, or
     /// drift off-line. Falls back to route bearing when there's no real
     /// heading (simulator/demo mode, or momentarily poor compass accuracy).
-    var displayHeading: Double {
-        locationService.currentHeading ?? routeBearingHeading
+    ///
+    /// This is the *smoothed* value — raw magnetometer readings genuinely
+    /// jitter several degrees moment to moment, especially bike-mounted
+    /// (vibration, nearby metal), and feeding that straight into the camera
+    /// every tick reads as a constant small wobble rather than a settled
+    /// direction. `refreshHeading()` (called once per tick) low-pass
+    /// filters it; this just returns the filtered result.
+    private(set) var displayHeading: Double = 0
+
+    /// Exponential blend factor toward the latest raw reading — low enough
+    /// to damp jitter, high enough to still catch up to a real turn within
+    /// a couple of ticks rather than lagging behind it.
+    private let headingSmoothingFactor: Double = 0.35
+
+    private func refreshHeading() {
+        let raw = locationService.currentHeading ?? routeBearingHeading
+        let delta = Self.shortestAngleDelta(from: displayHeading, to: raw)
+        displayHeading = Self.normalizedDegrees(displayHeading + delta * headingSmoothingFactor)
+    }
+
+    private static func shortestAngleDelta(from: Double, to: Double) -> Double {
+        var delta = (to - from).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta -= 360 } else if delta < -180 { delta += 360 }
+        return delta
+    }
+
+    private static func normalizedDegrees(_ degrees: Double) -> Double {
+        let d = degrees.truncatingRemainder(dividingBy: 360)
+        return d < 0 ? d + 360 : d
     }
 
     private var routeBearingHeading: Double {
@@ -248,6 +275,9 @@ final class ActiveRideModel {
     func start() {
         guard tickTask == nil else { return }
         locationService.startUpdating()
+        // Seed at the real starting direction rather than 0, so the first
+        // camera frame doesn't spin in from due north.
+        displayHeading = locationService.currentHeading ?? routeBearingHeading
         liveActivity.start(routeLabel: route.label, state: activityState())
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -357,6 +387,7 @@ final class ActiveRideModel {
             progressMeters = min(totalMeters, progressMeters + speedMs * deltaSeconds)
         }
 
+        refreshHeading()
         updateAnnouncements()
         liveActivity.update(activityState())
     }
