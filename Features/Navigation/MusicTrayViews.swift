@@ -9,12 +9,19 @@ struct MusicCompactBar: View {
     let largerControls: Bool
     let onExpand: () -> Void
 
+    /// Smaller than before (was 56/68) and each control now sits in its own
+    /// rounded glass circle rather than a bare icon — makes room for the
+    /// added shuffle button without the strip growing, and reads as more
+    /// deliberately "rounded" per the redesign everywhere music appears.
     private var controlSize: CGFloat {
-        largerControls ? LaneLineDesign.HitTarget.large : LaneLineDesign.HitTarget.comfortable
+        largerControls ? LaneLineDesign.HitTarget.comfortable : 44
+    }
+    private var shuffleSize: CGFloat {
+        largerControls ? 40 : 34
     }
 
     var body: some View {
-        HStack(spacing: LaneLineDesign.Spacing.medium) {
+        HStack(spacing: LaneLineDesign.Spacing.small) {
             if let item = music.nowPlaying {
                 artwork(item)
 
@@ -34,21 +41,38 @@ struct MusicCompactBar: View {
                 .accessibilityLabel("Now playing: \(item.title) by \(item.artist). Expand player.")
 
                 Button {
+                    Task { await music.toggleShuffle() }
+                } label: {
+                    Image(systemName: "shuffle")
+                        .font(.system(size: shuffleSize * 0.42, weight: .semibold))
+                        .frame(width: shuffleSize, height: shuffleSize)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(music.isShuffled ? LaneLineDesign.Colors.primary : LaneLineDesign.Colors.textSecondary)
+                .rideGlass(in: Circle(), interactive: true)
+                .accessibilityLabel(music.isShuffled ? "Shuffle on" : "Shuffle off")
+
+                Button {
                     Task { await music.playPause() }
                 } label: {
                     Image(systemName: item.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title2)
+                        .font(.system(size: controlSize * 0.42, weight: .bold))
                         .frame(width: controlSize, height: controlSize)
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(LaneLineDesign.Colors.primary)
+                .rideGlass(in: Circle(), interactive: true)
                 .accessibilityLabel(item.isPlaying ? "Pause" : "Play")
 
                 Button {
                     Task { await music.skipNext() }
                 } label: {
                     Image(systemName: "forward.fill")
-                        .font(.title2)
+                        .font(.system(size: controlSize * 0.38, weight: .semibold))
                         .frame(width: controlSize, height: controlSize)
                 }
+                .buttonStyle(.plain)
+                .rideGlass(in: Circle(), interactive: true)
                 .accessibilityLabel("Next track")
             } else {
                 Image(systemName: "music.note")
@@ -87,14 +111,14 @@ struct MusicCompactBar: View {
                 artworkPlaceholder
             }
             .frame(width: 44, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.small))
+            .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.medium))
         } else {
             artworkPlaceholder
         }
     }
 
     private var artworkPlaceholder: some View {
-        RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.small)
+        RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.medium)
             .fill(.quaternary)
             .frame(width: 44, height: 44)
             .overlay(
@@ -103,158 +127,7 @@ struct MusicCompactBar: View {
     }
 }
 
-// MARK: - Expanded Sheet
-
-/// Bottom-sheet player: full transport controls, progress, and the rider's
-/// playlists. Presented over the ride screen; navigation stays visible in
-/// the sheet's upper detent.
-struct MusicExpandedSheet: View {
-    let music: any MusicServicing
-    let defaultPlaylistID: String?
-
-    var body: some View {
-        VStack(spacing: LaneLineDesign.Spacing.large) {
-            Capsule()
-                .fill(.tertiary)
-                .frame(width: 36, height: 5)
-                .padding(.top, LaneLineDesign.Spacing.small)
-
-            if let item = music.nowPlaying {
-                nowPlayingSection(item)
-            } else {
-                ContentUnavailableView(
-                    "Nothing playing",
-                    systemImage: "music.note",
-                    description: Text("Start a playlist below.")
-                )
-                .frame(height: 180)
-            }
-
-            playlistSection
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, LaneLineDesign.Spacing.large)
-        .presentationDetents([.medium, .large])
-        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-        .task {
-            await music.loadRidePlaylists()
-        }
-    }
-
-    private func nowPlayingSection(_ item: NowPlayingItem) -> some View {
-        VStack(spacing: LaneLineDesign.Spacing.medium) {
-            VStack(spacing: 4) {
-                Text(item.title)
-                    .font(.title3.weight(.bold))
-                    .lineLimit(1)
-                Text(item.artist)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            // Progress, polled once per second while visible.
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
-                let elapsed = min(music.currentPlaybackTime(), item.durationSeconds)
-                VStack(spacing: 4) {
-                    ProgressView(
-                        value: item.durationSeconds > 0 ? elapsed / item.durationSeconds : 0
-                    )
-                    HStack {
-                        Text(timeString(elapsed))
-                        Spacer()
-                        Text(item.durationFormatted)
-                    }
-                    .font(LaneLineDesign.Typography.mono)
-                    .foregroundStyle(.secondary)
-                }
-            }
-
-            RideGlassContainer(spacing: LaneLineDesign.Spacing.xlarge) {
-                HStack(spacing: LaneLineDesign.Spacing.xlarge) {
-                    Button {
-                        Task { await music.skipPrevious() }
-                    } label: {
-                        Image(systemName: "backward.fill")
-                            .font(.title)
-                            .frame(width: LaneLineDesign.HitTarget.large, height: LaneLineDesign.HitTarget.large)
-                    }
-                    .buttonStyle(.plain)
-                    .rideGlass(in: Circle(), interactive: true)
-                    .accessibilityLabel("Previous track")
-
-                    Button {
-                        Task { await music.playPause() }
-                    } label: {
-                        Image(systemName: item.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 64))
-                    }
-                    .accessibilityLabel(item.isPlaying ? "Pause" : "Play")
-
-                    Button {
-                        Task { await music.skipNext() }
-                    } label: {
-                        Image(systemName: "forward.fill")
-                            .font(.title)
-                            .frame(width: LaneLineDesign.HitTarget.large, height: LaneLineDesign.HitTarget.large)
-                    }
-                    .buttonStyle(.plain)
-                    .rideGlass(in: Circle(), interactive: true)
-                    .accessibilityLabel("Next track")
-                }
-            }
-        }
-    }
-
-    private var playlistSection: some View {
-        VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.small) {
-            Text("Ride playlists")
-                .font(LaneLineDesign.Typography.sectionHeader)
-
-            if music.ridePlaylists.isEmpty {
-                Text("Your Apple Music playlists will appear here.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: LaneLineDesign.Spacing.small) {
-                        ForEach(music.ridePlaylists) { playlist in
-                            Button {
-                                Task { await music.startPlaylist(id: playlist.id) }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    if playlist.id == defaultPlaylistID {
-                                        Image(systemName: "star.fill")
-                                            .font(.caption2)
-                                    }
-                                    Text(playlist.name)
-                                        .font(.subheadline.weight(.medium))
-                                        .lineLimit(1)
-                                }
-                                .padding(.horizontal, 14)
-                                .frame(height: LaneLineDesign.HitTarget.minimum)
-                                .rideGlass(in: Capsule(), interactive: true)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func timeString(_ seconds: Double) -> String {
-        let total = Int(max(0, seconds))
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
 #Preview("Compact bar") {
     MusicCompactBar(music: MockMusicService(), largerControls: false) {}
         .padding()
-}
-
-#Preview("Expanded sheet") {
-    MusicExpandedSheet(music: MockMusicService(), defaultPlaylistID: "pl.mock-commute")
 }

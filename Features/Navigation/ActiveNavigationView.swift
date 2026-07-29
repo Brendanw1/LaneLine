@@ -64,9 +64,11 @@ struct ActiveNavigationView: View {
         }
         .preferredColorScheme(customization.highContrastEnabled ? .dark : nil)
         .sheet(isPresented: $showMusicSheet) {
-            MusicExpandedSheet(
+            MusicNowPlayingView(
                 music: services.musicService,
-                defaultPlaylistID: appModel.riderProfile.defaultRidePlaylistID
+                lyrics: services.lyricsService,
+                defaultPlaylistID: appModel.riderProfile.defaultRidePlaylistID,
+                ride: ride
             )
         }
         .onAppear {

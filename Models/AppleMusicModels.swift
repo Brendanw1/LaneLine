@@ -18,6 +18,12 @@ struct NowPlayingItem: Identifiable, Codable, Equatable {
     var albumTitle: String
     var durationSeconds: Double
     var isPlaying: Bool
+    /// Apple's own catalog-computed dominant color for this artwork
+    /// (`MusicKit.Artwork.backgroundColor`), as `#RRGGBB` — real metadata,
+    /// not something extracted on-device. Stored as a hex string rather
+    /// than `Color` so this type can stay `Codable`. Nil for mocks/previews
+    /// and any artwork MusicKit didn't supply a color for.
+    var artworkBackgroundColorHex: String? = nil
 
     var durationFormatted: String {
         let totalSeconds = Int(durationSeconds)

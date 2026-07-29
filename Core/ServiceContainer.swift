@@ -12,6 +12,7 @@ final class ServiceContainer {
     let scoringService: any RouteScoringServiceProtocol
     let locationService: any LocationServicing
     let musicService: any MusicServicing
+    let lyricsService: any LyricsProviding
     let healthKitService: any HealthKitServicing
     let persistenceService: any PersistenceServiceProtocol
     let rideStore: any RideStoring
@@ -23,6 +24,7 @@ final class ServiceContainer {
         scoringService: any RouteScoringServiceProtocol = RouteScoringService(),
         locationService: (any LocationServicing)? = nil,
         musicService: (any MusicServicing)? = nil,
+        lyricsService: any LyricsProviding = CachingLyricsProvider(),
         healthKitService: (any HealthKitServicing)? = nil,
         persistenceService: any PersistenceServiceProtocol = PersistenceService(),
         rideStore: any RideStoring = RideStore(),
@@ -35,6 +37,7 @@ final class ServiceContainer {
         self.scoringService = scoringService
         self.locationService = locationService ?? LocationService()
         self.musicService = musicService ?? AppleMusicService()
+        self.lyricsService = lyricsService
         self.healthKitService = healthKitService ?? HealthKitService()
         self.persistenceService = persistenceService
         self.rideStore = rideStore
@@ -51,6 +54,7 @@ final class ServiceContainer {
         ServiceContainer(
             locationService: MockLocationService(),
             musicService: MockMusicService(),
+            lyricsService: MockLyricsProvider(),
             healthKitService: MockHealthKitService()
         )
     }
