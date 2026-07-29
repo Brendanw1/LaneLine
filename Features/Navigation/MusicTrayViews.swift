@@ -89,8 +89,16 @@ struct MusicCompactBar: View {
         .padding(.horizontal, LaneLineDesign.Spacing.medium)
         .padding(.vertical, LaneLineDesign.Spacing.small)
         // One glass surface for the whole strip — controls sit inside it
-        // rather than stacking glass on glass.
+        // rather than stacking glass on glass. The album-color gradient
+        // sits behind the glass (same source as the Now Playing screen's
+        // background) so the frosted material picks up a tint of it,
+        // rather than the bar staying neutral while the sheet above it
+        // goes colorful.
         .rideGlass(in: RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
+        .background {
+            NowPlayingBackground(colorHex: music.nowPlaying?.artworkBackgroundColorHex, compact: true)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large))
     }
 
     private var promptText: String {

@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.1</string>
+	<string>1.4.0</string>
 	<key>CFBundleVersion</key>
-	<string>6</string>
+	<string>7</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppleMusicUsageDescription</key>
@@ -30,6 +30,8 @@
 	<string>LaneLine uses your location to plan bike routes from where you are and to guide you turn by turn while riding.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>LaneLine uses the barometer to measure climbing and descent accurately during rides.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

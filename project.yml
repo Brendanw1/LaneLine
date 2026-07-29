@@ -27,6 +27,10 @@ targets:
       - Features
       - DesignSystem
       - PreviewContent
+      # Shared with LaneLineWidgets: the Live Activity attributes/content
+      # state type has to be visible to both the app (which starts/updates
+      # the activity) and the widget extension (which renders it).
+      - Shared
       # Copied as individual files, not a folder reference: a top-level
       # "Resources" directory inside an iOS bundle breaks CFBundle's flat
       # layout detection and the simulator rejects the install.
@@ -36,8 +40,8 @@ targets:
       path: Support/Info.plist
       properties:
         CFBundleDisplayName: LaneLine
-        CFBundleShortVersionString: "1.3.1"
-        CFBundleVersion: "6"
+        CFBundleShortVersionString: "1.4.0"
+        CFBundleVersion: "7"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -58,12 +62,16 @@ targets:
         UIBackgroundModes:
           - audio
           - location
+        NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
     entitlements:
       path: Support/LaneLine.entitlements
       properties:
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+    dependencies:
+      - target: LaneLineWidgets
+        embed: true
     scheme:
       testTargets:
         - LaneLineTests
@@ -78,3 +86,23 @@ targets:
       - Tests
     dependencies:
       - target: LaneLine
+
+  LaneLineWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Shared
+      - LaneLineWidgets
+    settings:
+      base:
+        # Extension bundle IDs must be the containing app's ID plus a
+        # suffix — the default `{bundleIdPrefix}.{target}` pattern would
+        # produce a sibling ID, not a contained one, which Xcode rejects
+        # at embed time.
+        PRODUCT_BUNDLE_IDENTIFIER: com.laneline.LaneLine.LaneLineWidgets
+    info:
+      path: LaneLineWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: LaneLine
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

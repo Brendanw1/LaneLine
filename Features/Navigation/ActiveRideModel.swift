@@ -65,7 +65,26 @@ final class ActiveRideModel {
     }
 
     var currentGrade: Double { currentSegment?.averageGrade ?? 0 }
-    var currentStreet: String? { currentSegment?.streetName }
+
+    /// Falls back to the nearest named segment behind or ahead when the
+    /// current one has no name — the bundled city-wide OSM network (unlike
+    /// the old hand-curated demo corridors) has plenty of short unnamed
+    /// connectors and alleys, and "no street shown at all" while riding
+    /// through one of those is worse than naming the street you're
+    /// physically still on.
+    var currentStreet: String? {
+        guard let index = currentSegmentIndex else { return nil }
+        if let name = route.segments[safe: index]?.streetName, !name.isEmpty { return name }
+        for offset in 1...10 {
+            if let name = route.segments[safe: index - offset]?.streetName, !name.isEmpty {
+                return name
+            }
+            if let name = route.segments[safe: index + offset]?.streetName, !name.isEmpty {
+                return name
+            }
+        }
+        return nil
+    }
 
     var distanceToNextTurnMeters: Double? {
         guard let index = currentSegmentIndex, index + 1 < route.segments.count else { return nil }
@@ -114,6 +133,7 @@ final class ActiveRideModel {
     private let locationService: any LocationServicing
     private let routingService: any RoutingServiceProtocol
     private let voiceGuide: (any RideVoiceGuiding)?
+    private let liveActivity = RideLiveActivityController()
 
     /// Location fixes farther than this from the route count as off-route.
     private let liveTrackingToleranceMeters: Double = 150
@@ -127,6 +147,14 @@ final class ActiveRideModel {
     private var announcedImminent: Set<Int> = []
     private var announcedStart = false
     private var announcedArrival = false
+    /// The turnKey the most recently queued approach/imminent phrase was
+    /// about. `AVSpeechSynthesizer.speak()` queues rather than interrupts,
+    /// so on a route with short blocks a still-queued phrase for turn N can
+    /// outlive the moment turn N+1 becomes current — it would then play out
+    /// loud describing a turn that's no longer next, contradicting whatever
+    /// the screen shows by then. Cancelling before announcing a *different*
+    /// turnKey keeps only the freshest instruction ever audible.
+    private var lastAnnouncedTurnKey: Int?
 
     init(
         route: RouteCandidate,
@@ -210,6 +238,7 @@ final class ActiveRideModel {
     func start() {
         guard tickTask == nil else { return }
         locationService.startUpdating()
+        liveActivity.start(routeLabel: route.label, state: activityState())
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -227,6 +256,27 @@ final class ActiveRideModel {
         tickTask = nil
         voiceGuide?.stopSpeaking()
         locationService.stopUpdating()
+        liveActivity.end()
+    }
+
+    /// Real system Dynamic Island / Lock Screen content — mirrors exactly
+    /// what `ManeuverBanner` shows on screen (same next-turn/distance/
+    /// current-street source), so the two can never say different things.
+    private func activityState() -> RideActivityAttributes.ContentState {
+        if let next = nextSegment, let distance = distanceToNextTurnMeters {
+            return RideActivityAttributes.ContentState(
+                turnSystemImageName: next.turnType.systemImage,
+                turnInstruction: "\(next.turnType.displayName) onto \(next.streetName ?? "next street")",
+                distanceToTurnText: RideFormat.distance(distance),
+                currentStreet: currentStreet ?? ""
+            )
+        }
+        return RideActivityAttributes.ContentState(
+            turnSystemImageName: "flag.checkered",
+            turnInstruction: "Destination ahead",
+            distanceToTurnText: RideFormat.distance(remainingMeters),
+            currentStreet: currentStreet ?? ""
+        )
     }
 
     /// Re-plan to the route's destination using the same strategy, from the
@@ -244,6 +294,14 @@ final class ActiveRideModel {
             profile: profile,
             strategies: [route.strategyType]
         ).first {
+            // `AVSpeechSynthesizer.speak()` queues rather than interrupts, so
+            // an "approach"/"imminent" announcement generated from the *old*
+            // route can still be sitting queued here — if left alone, it
+            // plays out loud after this reroute completes, describing a turn
+            // that no longer exists while the screen already shows the new
+            // route. Flushing it is the fix for "voice said a different turn
+            // than the screen."
+            voiceGuide?.stopSpeaking()
             route = fresh
             progressMeters = 0
             isOffRoute = false
@@ -290,6 +348,7 @@ final class ActiveRideModel {
         }
 
         updateAnnouncements()
+        liveActivity.update(activityState())
     }
 
     // MARK: Voice guidance triggers
@@ -298,6 +357,7 @@ final class ActiveRideModel {
         announcedApproach = []
         announcedImminent = []
         announcedArrival = false
+        lastAnnouncedTurnKey = nil
     }
 
     private func updateAnnouncements() {
@@ -323,17 +383,25 @@ final class ActiveRideModel {
               let index = currentSegmentIndex else { return }
         let turnKey = index + 1
 
+        func announceForThisTurn(_ phrase: String) {
+            if let lastAnnouncedTurnKey, lastAnnouncedTurnKey != turnKey {
+                voiceGuide.stopSpeaking()
+            }
+            lastAnnouncedTurnKey = turnKey
+            voiceGuide.announce(phrase)
+        }
+
         if distance <= 60 {
             if !announcedImminent.contains(turnKey) {
                 announcedImminent.insert(turnKey)
                 announcedApproach.insert(turnKey)
-                voiceGuide.announce(RideAnnouncements.imminent(
+                announceForThisTurn(RideAnnouncements.imminent(
                     turn: next.turnType, street: next.streetName
                 ))
             }
         } else if distance <= 350, !announcedApproach.contains(turnKey) {
             announcedApproach.insert(turnKey)
-            voiceGuide.announce(RideAnnouncements.approach(
+            announceForThisTurn(RideAnnouncements.approach(
                 turn: next.turnType, street: next.streetName, inMeters: distance
             ))
         }

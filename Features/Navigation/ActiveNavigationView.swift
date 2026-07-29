@@ -146,18 +146,36 @@ struct ActiveNavigationView: View {
                     }
                 }
             }
+            // A plain SwiftUI `Annotation` stays screen-upright regardless
+            // of the map's rotation (unlike geometry overlays, which rotate
+            // with it) — since the camera below is already heading-locked,
+            // "up on screen" already means "current direction of travel," so
+            // a fixed north-pointing arrow here is already correctly
+            // oriented with no extra rotation math needed.
             Annotation("", coordinate: ride.currentCoordinate) {
                 ZStack {
-                    Circle().fill(.white).frame(width: 22, height: 22)
-                    Circle().fill(LaneLineDesign.Colors.primary).frame(width: 14, height: 14)
+                    Circle()
+                        .fill(LaneLineDesign.Colors.primary)
+                        .frame(width: 34, height: 34)
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 3)
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "location.north.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
                 }
-                .shadow(radius: 3)
+                .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
             }
         }
         .mapStyle(.standard(elevation: .realistic))
         .ignoresSafeArea()
         .onChange(of: ride.progressMeters, initial: true) {
-            withAnimation(.linear(duration: 1)) {
+            // Duration runs a touch past the 1s tick interval so consecutive
+            // camera animations always overlap slightly instead of settling
+            // and re-starting each tick — that dead stop-start is what read
+            // as choppy before. Ease in/out reads as far more fluid than
+            // linear for the heading swing through a turn specifically.
+            withAnimation(.easeInOut(duration: 1.1)) {
                 camera = .camera(MapCamera(
                     centerCoordinate: ride.currentCoordinate,
                     distance: 900,
@@ -430,11 +448,14 @@ struct ManeuverBanner: View {
                     Text("Destination ahead")
                         .font(.subheadline.weight(.semibold))
                 }
-                if let street = ride.currentStreet {
-                    Text("on \(street)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "location.fill")
+                        .font(.caption2)
+                    Text(ride.currentStreet ?? "Locating street…")
                 }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(ride.currentStreet != nil ? LaneLineDesign.Colors.textSecondary : LaneLineDesign.Colors.textTertiary)
+                .lineLimit(1)
             }
             Spacer()
         }

@@ -9,28 +9,43 @@ import SwiftUI
 /// that up cheaply.
 struct NowPlayingBackground: View {
     let colorHex: String?
+    /// Compact contexts (the ride-screen bar, sitting behind glass rather
+    /// than being the screen itself) get a simpler two-stop gradient — no
+    /// grain, no safe-area override. The full vertical treatment is sized
+    /// and shaped for a near-fullscreen sheet, not a ~60pt-tall strip.
+    var compact: Bool = false
 
     private var baseColor: Color {
         colorHex.flatMap(Color.init(hex:)) ?? LaneLineDesign.Colors.primary
     }
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [baseColor.opacity(0.85), baseColor.opacity(0.45), .black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            RadialGradient(
-                colors: [baseColor.opacity(0.55), .clear],
-                center: .topLeading,
-                startRadius: 10,
-                endRadius: 480
-            )
-            GrainTexture()
-                .blendMode(.overlay)
+        Group {
+            if compact {
+                LinearGradient(
+                    colors: [baseColor.opacity(0.6), baseColor.opacity(0.25)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            } else {
+                ZStack {
+                    LinearGradient(
+                        colors: [baseColor.opacity(0.85), baseColor.opacity(0.45), .black],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    RadialGradient(
+                        colors: [baseColor.opacity(0.55), .clear],
+                        center: .topLeading,
+                        startRadius: 10,
+                        endRadius: 480
+                    )
+                    GrainTexture()
+                        .blendMode(.overlay)
+                }
+                .ignoresSafeArea()
+            }
         }
-        .ignoresSafeArea()
         .animation(.easeInOut(duration: 0.6), value: colorHex)
     }
 }
