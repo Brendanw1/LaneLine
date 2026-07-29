@@ -13,6 +13,15 @@ struct ActiveNavigationView: View {
     @State private var ride: ActiveRideModel?
     @State private var showMusicSheet = false
     @State private var camera: MapCameraPosition = .automatic
+    @State private var isFollowSuspended = false
+    @State private var lastCommandedCamera: MapCamera?
+
+    /// Beyond any of these, a settled camera that doesn't match what we
+    /// last commanded ourselves is treated as a user gesture, not our own
+    /// animation completing.
+    private static let followSuspendDistanceEpsilonMeters: Double = 15
+    private static let followSuspendHeadingEpsilonDegrees: Double = 8
+    private static let followSuspendZoomEpsilonMeters: Double = 200
     @State private var recorder: RideRecorder?
     @State private var pageIndex = 0
     @State private var destinationRacks: [BikeParkingRack] = []
@@ -61,7 +70,7 @@ struct ActiveNavigationView: View {
                 .indexViewStyle(.page(backgroundDisplayMode: .interactive))
                 .ignoresSafeArea(edges: .bottom)
 
-                mapModeToggle
+                trailingMapControls(ride)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                     .padding(.trailing, LaneLineDesign.Spacing.medium)
             } else {
@@ -185,13 +194,27 @@ struct ActiveNavigationView: View {
         .mapStyle(.standard(elevation: .realistic))
         .ignoresSafeArea()
         .onChange(of: ride.progressMeters, initial: true) {
+            guard !isFollowSuspended else { return }
             // Duration runs a touch past the 1s tick interval so consecutive
             // camera animations always overlap slightly instead of settling
             // and re-starting each tick — that dead stop-start is what read
             // as choppy before. Ease in/out reads as far more fluid than
             // linear for the heading swing through a turn specifically.
-            withAnimation(.easeInOut(duration: 1.1)) {
-                camera = .camera(followCamera(ride))
+            commitFollowCamera(ride, animation: .easeInOut(duration: 1.1))
+        }
+        .onMapCameraChange(frequency: .onEnd) { context in
+            guard let lastCommandedCamera else { return }
+            let driftMeters = GeoMath.distanceMeters(
+                from: context.camera.centerCoordinate, to: lastCommandedCamera.centerCoordinate
+            )
+            let headingDriftDegrees = abs(GeoMath.turnAngleDegrees(
+                fromBearing: lastCommandedCamera.heading, toBearing: context.camera.heading
+            ))
+            let zoomDriftMeters = abs(context.camera.distance - lastCommandedCamera.distance)
+            if driftMeters > Self.followSuspendDistanceEpsilonMeters
+                || headingDriftDegrees > Self.followSuspendHeadingEpsilonDegrees
+                || zoomDriftMeters > Self.followSuspendZoomEpsilonMeters {
+                isFollowSuspended = true
             }
         }
     }
@@ -203,6 +226,18 @@ struct ActiveNavigationView: View {
             heading: ride.displayHeading,
             pitch: 40
         )
+    }
+
+    /// Every programmatic camera write goes through here so
+    /// `onMapCameraChange` always has a ground truth to diff a settled
+    /// camera against — the only way a discrepancy can appear is a user
+    /// gesture, since nothing else ever touches `camera` directly.
+    private func commitFollowCamera(_ ride: ActiveRideModel, animation: Animation) {
+        let target = followCamera(ride)
+        lastCommandedCamera = target
+        withAnimation(animation) {
+            camera = .camera(target)
+        }
     }
 
     /// Opens the route overview as a separate modal sheet rather than
@@ -230,6 +265,36 @@ struct ActiveNavigationView: View {
         .foregroundStyle(LaneLineDesign.Colors.primary)
         .rideGlass(in: Circle(), interactive: true)
         .accessibilityLabel("Show whole route")
+    }
+
+    private func trailingMapControls(_ ride: ActiveRideModel) -> some View {
+        VStack(spacing: LaneLineDesign.Spacing.small) {
+            if isFollowSuspended {
+                recenterButton(ride)
+            }
+            mapModeToggle
+        }
+    }
+
+    /// Appears only while a manual pan/rotate/pinch has suspended auto-
+    /// follow (see `onMapCameraChange` on `rideMap`). Tapping it resumes
+    /// follow and snaps the camera back onto the rider.
+    private func recenterButton(_ ride: ActiveRideModel) -> some View {
+        Button {
+            isFollowSuspended = false
+            commitFollowCamera(ride, animation: .easeInOut(duration: 0.6))
+        } label: {
+            Image(systemName: "location.fill")
+                .font(.system(size: largerControls ? 22 : 18, weight: .semibold))
+                .frame(
+                    width: largerControls ? 52 : 44,
+                    height: largerControls ? 52 : 44
+                )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .background(LaneLineDesign.Colors.primary, in: Circle())
+        .accessibilityLabel("Recenter map on your position")
     }
 
     // MARK: Overlay stack
