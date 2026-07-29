@@ -69,6 +69,24 @@ struct ActiveNavigationView: View {
                 .tabViewStyle(.page(indexDisplayMode: .always))
                 .indexViewStyle(.page(backgroundDisplayMode: .interactive))
                 .ignoresSafeArea(edges: .bottom)
+                // `TabView` spans the full screen and is backed by a real
+                // UIPageViewController, which — unlike plain SwiftUI empty
+                // space — captures touches across its whole bounds
+                // regardless of whether its current page has visible
+                // content at that point. Sitting in front of the map (it
+                // has to, for its own controls to be tappable), it was
+                // silently absorbing every touch meant for the map below:
+                // the mode-toggle button never received a tap, and map
+                // pan/pinch/rotate in overview mode was very likely never
+                // reaching the map either. Disabling it specifically while
+                // in overview — the one mode where the rider actually wants
+                // to gesture on the map instead of the ride controls — is
+                // what makes both of those work.
+                .allowsHitTesting(mapMode == .follow)
+
+                mapModeToggle(ride)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .padding(.trailing, LaneLineDesign.Spacing.medium)
             } else {
                 ProgressView()
             }
@@ -190,10 +208,6 @@ struct ActiveNavigationView: View {
             withAnimation(.easeInOut(duration: 1.1)) {
                 camera = .camera(followCamera(ride))
             }
-        }
-        .overlay(alignment: .trailing) {
-            mapModeToggle(ride)
-                .padding(.trailing, LaneLineDesign.Spacing.medium)
         }
     }
 
