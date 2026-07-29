@@ -51,6 +51,19 @@ actor RoutingService: RoutingServiceProtocol {
         profile: RiderProfile,
         strategies: [RouteStrategyType]
     ) async throws -> [RouteCandidate] {
+        try await generateRoutes(
+            from: origin, to: destination, profile: profile,
+            strategies: strategies, preferWiggle: false
+        )
+    }
+
+    func generateRoutes(
+        from origin: CLLocationCoordinate2D,
+        to destination: CLLocationCoordinate2D,
+        profile: RiderProfile,
+        strategies: [RouteStrategyType],
+        preferWiggle: Bool
+    ) async throws -> [RouteCandidate] {
         let bounds = GeoMath.boundingBox(containing: origin, destination, paddingMeters: 1500)
         let graph = try await geospatialService.routeGraph(covering: bounds)
 
@@ -67,7 +80,7 @@ actor RoutingService: RoutingServiceProtocol {
 
         var paths: [(strategy: RouteStrategyType, edges: [RouteGraph.Edge])] = []
         for strategy in strategies {
-            let costModel = RoutingCostModel(profile: profile, strategy: strategy)
+            let costModel = RoutingCostModel(profile: profile, strategy: strategy, preferWiggle: preferWiggle)
             if let edges = shortestPath(in: graph, from: start.id, to: goal.id, costModel: costModel),
                !edges.isEmpty {
                 paths.append((strategy, edges))
@@ -87,7 +100,8 @@ actor RoutingService: RoutingServiceProtocol {
                to: goal.id,
                profile: profile,
                strategies: strategies.filter { $0 != distinctPaths[0].strategy },
-               avoiding: distinctPaths[0].edges
+               avoiding: distinctPaths[0].edges,
+               preferWiggle: preferWiggle
            ) {
             distinctPaths.append(alternative)
         }
@@ -140,11 +154,12 @@ actor RoutingService: RoutingServiceProtocol {
         to goal: Int,
         profile: RiderProfile,
         strategies: [RouteStrategyType],
-        avoiding primary: [RouteGraph.Edge]
+        avoiding primary: [RouteGraph.Edge],
+        preferWiggle: Bool
     ) -> (strategy: RouteStrategyType, edges: [RouteGraph.Edge])? {
         let penalized = Set(primary.map(\.id))
         for strategy in strategies {
-            let costModel = RoutingCostModel(profile: profile, strategy: strategy)
+            let costModel = RoutingCostModel(profile: profile, strategy: strategy, preferWiggle: preferWiggle)
             guard let edges = shortestPath(
                 in: graph, from: start, to: goal,
                 costModel: costModel, penalizing: penalized

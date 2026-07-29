@@ -73,7 +73,8 @@ struct RouteMetricsCalculator {
             routeStressScore: stress,
             directnessScore: directness,
             confidenceScore: confidence,
-            estimatedCalories: estimatedCalories
+            estimatedCalories: estimatedCalories,
+            usedWiggleCorridor: edges.contains { $0.isWiggleCorridor }
         )
     }
 

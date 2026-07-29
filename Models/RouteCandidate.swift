@@ -23,6 +23,9 @@ struct RouteCandidate: Identifiable, Codable, Equatable {
     /// Estimated metabolic kilocalories for this rider on this route, from
     /// the same physics model used to total calories during a recorded ride.
     var estimatedCalories: Double
+    /// Whether this route's path uses San Francisco's real "Wiggle"
+    /// corridor. See `WiggleCorridor`.
+    var usedWiggleCorridor: Bool
 
     // MARK: - Computed Properties
 
@@ -70,7 +73,8 @@ struct RouteCandidate: Identifiable, Codable, Equatable {
         recommendationReason: String = "",
         cautionNotes: [String] = [],
         scoreBreakdown: RouteScoreBreakdown? = nil,
-        estimatedCalories: Double = 0
+        estimatedCalories: Double = 0,
+        usedWiggleCorridor: Bool = false
     ) {
         self.id = id
         self.label = label
@@ -90,5 +94,6 @@ struct RouteCandidate: Identifiable, Codable, Equatable {
         self.cautionNotes = cautionNotes
         self.scoreBreakdown = scoreBreakdown
         self.estimatedCalories = estimatedCalories
+        self.usedWiggleCorridor = usedWiggleCorridor
     }
 }

@@ -12,7 +12,8 @@ final class RoutingCostModelTests: XCTestCase {
         roadClass: RoadClass = .residential,
         surface: SurfaceType = .asphalt,
         stress: Double = 0.15,
-        confidence: Double = 0.9
+        confidence: Double = 0.9,
+        isWiggleCorridor: Bool = false
     ) -> RouteGraph.Edge {
         RouteGraph.Edge(
             id: 0, from: 0, to: 1,
@@ -28,7 +29,8 @@ final class RoutingCostModelTests: XCTestCase {
             stressScore: stress,
             confidenceScore: confidence,
             streetName: nil,
-            geometry: []
+            geometry: [],
+            isWiggleCorridor: isWiggleCorridor
         )
     }
 

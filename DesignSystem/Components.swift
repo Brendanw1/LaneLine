@@ -23,6 +23,23 @@ struct StrategyBadge: View {
     }
 }
 
+/// Marks a route that actually threads through SF's real Wiggle corridor.
+/// See `WiggleCorridor`.
+struct WiggleBadge: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.triangle.swap").font(.system(size: 9))
+            Text("Via the Wiggle")
+        }
+        .font(LaneLineDesign.Typography.caption.weight(.semibold))
+        .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .wiggleGlow(cornerRadius: 100)
+    }
+}
+
 /// Small pill showing a facility/protection descriptor on segment rows.
 struct FacilityBadge: View {
     let facility: BikeFacilityType

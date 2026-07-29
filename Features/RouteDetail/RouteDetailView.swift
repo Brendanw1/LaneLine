@@ -204,6 +204,9 @@ struct RouteDetailView: View {
                         strategy: route.strategyType,
                         isRecommended: route.strategyType == .balanced
                     )
+                    if route.usedWiggleCorridor {
+                        WiggleBadge()
+                    }
                     Spacer()
                     Text("ETA \(RideFormat.eta(arrivingIn: route.etaSeconds))")
                         .font(LaneLineDesign.Typography.caption)

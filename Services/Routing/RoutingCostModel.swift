@@ -179,15 +179,28 @@ struct RoutingWeights {
 struct RoutingCostModel {
     let bikeType: BikeType
     let weights: RoutingWeights
+    /// When true, edges on SF's real "Wiggle" corridor (see `WiggleCorridor`)
+    /// get a flat cost discount. A* still weighs that discount against real
+    /// added distance, so this only actually changes the winning path when
+    /// the Wiggle is a reasonable way to get from A to B — no separate
+    /// "does this trip cross the hill" detection needed.
+    let preferWiggle: Bool
 
-    init(profile: RiderProfile, strategy: RouteStrategyType) {
+    /// Discount applied to Wiggle-corridor edges when `preferWiggle` is on.
+    /// Flat across bike types and strategies — this is an explicit rider
+    /// request, not a tunable tradeoff like climb tolerance.
+    private static let wiggleFactor: Double = 0.65
+
+    init(profile: RiderProfile, strategy: RouteStrategyType, preferWiggle: Bool = false) {
         self.bikeType = profile.bikeType
         self.weights = RoutingWeights.base(for: profile).applying(strategy)
+        self.preferWiggle = preferWiggle
     }
 
-    init(bikeType: BikeType, weights: RoutingWeights) {
+    init(bikeType: BikeType, weights: RoutingWeights, preferWiggle: Bool = false) {
         self.bikeType = bikeType
         self.weights = weights
+        self.preferWiggle = preferWiggle
     }
 
     func cost(of edge: RouteGraph.Edge) -> Double {
@@ -222,6 +235,10 @@ struct RoutingCostModel {
         // Low-confidence attribution earns a mild hedge so uncertain edges
         // lose ties against well-understood ones.
         cost *= 1 + (1 - edge.confidenceScore) * 0.15
+
+        if preferWiggle && edge.isWiggleCorridor {
+            cost *= Self.wiggleFactor
+        }
 
         return cost
     }

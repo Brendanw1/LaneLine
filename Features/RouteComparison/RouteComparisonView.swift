@@ -102,6 +102,9 @@ struct RouteCandidateCard: View {
             VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.small) {
                 HStack {
                     StrategyBadge(strategy: candidate.strategyType, isRecommended: isRecommended)
+                    if candidate.usedWiggleCorridor {
+                        WiggleBadge()
+                    }
                     Spacer()
                     Text(candidate.durationFormatted)
                         .font(LaneLineDesign.Typography.metricValue)

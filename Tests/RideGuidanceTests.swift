@@ -44,6 +44,16 @@ private actor StubRoutingService: RoutingServiceProtocol {
         return [canned]
     }
 
+    func generateRoutes(
+        from origin: CLLocationCoordinate2D,
+        to destination: CLLocationCoordinate2D,
+        profile: RiderProfile,
+        strategies: [RouteStrategyType],
+        preferWiggle: Bool
+    ) async throws -> [RouteCandidate] {
+        try await generateRoutes(from: origin, to: destination, profile: profile, strategies: strategies)
+    }
+
     func scoreRoute(
         _ route: RouteCandidate, profile: RiderProfile
     ) async throws -> RouteScoreBreakdown {

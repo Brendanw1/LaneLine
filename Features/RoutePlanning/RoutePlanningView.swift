@@ -20,6 +20,10 @@ final class RoutePlanningModel {
     private(set) var destination: SelectedDestination?
     private(set) var candidates: [RouteCandidate] = []
     var showComparison = false
+    /// Rider-set before searching; biases every strategy toward SF's real
+    /// "Wiggle" corridor when it's a reasonable way to get there. See
+    /// `WiggleCorridor` and `RoutingCostModel`.
+    var preferWiggle = false
 
     /// Fallback origin for simulators/devices without a fix: 16th & Valencia,
     /// the heart of the sample network.
@@ -40,7 +44,9 @@ final class RoutePlanningModel {
             candidates = try await routing.generateRoutes(
                 from: origin,
                 to: destination.coordinate,
-                profile: profile
+                profile: profile,
+                strategies: [.balanced, .safer, .faster, .easierClimbing],
+                preferWiggle: preferWiggle
             )
             phase = .loaded
             showComparison = true
@@ -137,6 +143,7 @@ struct RoutePlanningView: View {
     private var overlayContent: some View {
         VStack(spacing: LaneLineDesign.Spacing.medium) {
             searchBar
+            wiggleToggle
 
             if case .planning = model.phase {
                 planningBanner
@@ -174,6 +181,37 @@ struct RoutePlanningView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Search for a destination")
+    }
+
+    /// Crossing the city east-west usually means climbing somewhere — this
+    /// biases every strategy toward the real Wiggle corridor when it's a
+    /// reasonable way to do that climbing at its easiest. Self-limiting: it
+    /// only changes the winning path when the Wiggle is actually near the
+    /// way there, so it's safe to leave on for any trip.
+    private var wiggleToggle: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                model.preferWiggle.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.swap")
+                Text("Prefer the Wiggle")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(
+                model.preferWiggle ? LaneLineDesign.Colors.primary : LaneLineDesign.Colors.textSecondary
+            )
+            .padding(.horizontal, LaneLineDesign.Spacing.medium)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
+        .background(LaneLineDesign.Colors.surface, in: Capsule())
+        .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
+        .wiggleGlow(cornerRadius: 100, active: model.preferWiggle)
+        .accessibilityLabel("Prefer the Wiggle route")
+        .accessibilityValue(model.preferWiggle ? "On" : "Off")
+        .accessibilityAddTraits(.isButton)
     }
 
     private var planningBanner: some View {

@@ -74,7 +74,7 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     /// the elevation bundle went from a 6,789-point bikeway-only subset to
     /// full city coverage, but every device that had already built and
     /// cached a graph kept silently serving the old near-zero-grade one.
-    private static let bundledDataVersion = 2
+    private static let bundledDataVersion = 3
     private var versionURL: URL { cacheURL.deletingLastPathComponent().appending(path: "route-graph-version.txt") }
 
     var currentSource: NetworkSource { source }

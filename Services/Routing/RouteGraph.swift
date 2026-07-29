@@ -35,6 +35,9 @@ struct RouteGraph: Codable {
         let confidenceScore: Double
         let streetName: String?
         let geometry: [RouteCoordinate]
+        /// Whether this edge is part of San Francisco's real "Wiggle"
+        /// corridor. See `WiggleCorridor`.
+        let isWiggleCorridor: Bool
 
         var elevationGainMeters: Double { max(0, grade * lengthMeters) }
     }

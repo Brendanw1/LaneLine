@@ -19,6 +19,9 @@ struct RawNetworkEdge {
     var stressOverride: Double?
     /// How complete the source attribution is, before graph-level adjustments.
     var attributeConfidence: Double = 0.5
+    /// Whether this way is part of San Francisco's real "Wiggle" corridor.
+    /// See `WiggleCorridor`.
+    var isWiggleCorridor: Bool = false
 }
 
 /// Fuses bikeway, street-attribute, and elevation inputs into a routable
@@ -60,7 +63,10 @@ struct NetworkGraphBuilder {
                 surfaceType: attributes.surfaceType,
                 oneWay: attributes.isOneWay,
                 speedLimitKmh: attributes.speedLimitKmh,
-                laneCount: attributes.laneCount
+                laneCount: attributes.laneCount,
+                isWiggleCorridor: WiggleCorridor.matches(
+                    streetName: way.tags?["name"], coordinates: coordinates
+                )
             )
 
             if let match = bikewayIndex.nearestSegment(
@@ -102,7 +108,10 @@ struct NetworkGraphBuilder {
                 roadClass: segment.facilityType == .offStreetPath ? .residential : .unknown,
                 surfaceType: segment.facilityType == .offStreetPath ? .paved : .unknown,
                 oneWay: segment.oneWay,
-                attributeConfidence: 0.7
+                attributeConfidence: 0.7,
+                isWiggleCorridor: WiggleCorridor.matches(
+                    streetName: segment.streetName, coordinates: segment.geometry
+                )
             )
         }
     }
@@ -280,7 +289,8 @@ struct NetworkGraphBuilder {
             stressScore: stress,
             confidenceScore: confidence(for: raw, hasGrade: grade != 0 || length < 30),
             streetName: raw.streetName,
-            geometry: geometry
+            geometry: geometry,
+            isWiggleCorridor: raw.isWiggleCorridor
         ))
     }
 

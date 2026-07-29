@@ -20,6 +20,16 @@ protocol RoutingServiceProtocol: Sendable {
         strategies: [RouteStrategyType]
     ) async throws -> [RouteCandidate]
 
+    /// Like the above, but also biases every strategy's cost toward San
+    /// Francisco's real "Wiggle" corridor when the rider has asked for it.
+    func generateRoutes(
+        from origin: CLLocationCoordinate2D,
+        to destination: CLLocationCoordinate2D,
+        profile: RiderProfile,
+        strategies: [RouteStrategyType],
+        preferWiggle: Bool
+    ) async throws -> [RouteCandidate]
+
     /// Score a single route candidate against the rider profile.
     func scoreRoute(
         _ route: RouteCandidate,
