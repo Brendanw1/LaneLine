@@ -53,3 +53,71 @@ enum NavigationOrientationFilters {
             && heading >= 0
     }
 }
+
+/// Fuses GPS course and compass heading into one smoothed, jitter-resistant
+/// bearing for the ride camera/puck. Course-first while moving; frozen on
+/// the last good course briefly when slowing (avoids twitching at
+/// intersections); falls back to compass, then route bearing, only once
+/// course has truly gone stale.
+final class NavigationOrientationEngine {
+    private(set) var displayBearing: Double
+    private(set) var activeSource: OrientationSource = .routeBearing
+
+    private var frozenCourse: Double?
+    private var secondsSinceCourseTrustworthy: Double = .infinity
+    private let config: NavigationOrientationConfig
+
+    init(initialBearing: Double, config: NavigationOrientationConfig = .default) {
+        self.displayBearing = GeoMath.normalizedDegrees(initialBearing)
+        self.config = config
+    }
+
+    /// Snaps the display bearing directly to `bearing`, bypassing
+    /// smoothing — used once at ride start so the first camera frame
+    /// doesn't spin in from wherever the engine happened to initialize.
+    func seed(bearing: Double) {
+        displayBearing = GeoMath.normalizedDegrees(bearing)
+    }
+
+    /// One fusion step. Call once per ride tick.
+    @discardableResult
+    func update(
+        speedMetersPerSecond: Double?,
+        course: Double?,
+        heading: Double?,
+        headingAccuracy: Double?,
+        routeBearing: Double,
+        deltaSeconds: Double
+    ) -> Double {
+        let target: Double
+
+        if NavigationOrientationFilters.isCourseTrustworthy(
+            speedMetersPerSecond: speedMetersPerSecond, course: course, config: config
+        ), let course {
+            target = course
+            frozenCourse = course
+            secondsSinceCourseTrustworthy = 0
+            activeSource = .course
+        } else if let frozenCourse, secondsSinceCourseTrustworthy < config.courseFreezeGraceSeconds {
+            target = frozenCourse
+            secondsSinceCourseTrustworthy += deltaSeconds
+            activeSource = .course
+        } else if NavigationOrientationFilters.isHeadingTrustworthy(
+            heading: heading, accuracy: headingAccuracy, config: config
+        ), let heading {
+            target = heading
+            activeSource = .heading
+        } else {
+            target = routeBearing
+            activeSource = .routeBearing
+        }
+
+        let delta = GeoMath.turnAngleDegrees(fromBearing: displayBearing, toBearing: target)
+        if abs(delta) >= config.minimumAngleDeltaDegrees {
+            displayBearing = GeoMath.interpolatedAngle(
+                from: displayBearing, to: target, fraction: config.smoothingFactor
+            )
+        }
+        return displayBearing
+    }
+}
