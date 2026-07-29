@@ -16,17 +16,7 @@ struct ActiveNavigationView: View {
     @State private var recorder: RideRecorder?
     @State private var pageIndex = 0
     @State private var destinationRacks: [BikeParkingRack] = []
-    @State private var mapMode: RideMapMode = .follow
-
-    private enum RideMapMode {
-        /// Heading-locked POV, camera re-centers every tick — the normal
-        /// turn-by-turn state.
-        case follow
-        /// Whole route fit to bounds, free pan/pinch/rotate — the camera is
-        /// left alone entirely so gestures aren't fighting an auto-recenter
-        /// every second.
-        case overview
-    }
+    @State private var showOverviewSheet = false
 
     private var customization: RideScreenCustomization { appModel.rideCustomization }
     private var largerControls: Bool {
@@ -39,55 +29,41 @@ struct ActiveNavigationView: View {
             if let ride, let recorder {
                 rideMap(ride)
 
-                // Rendering TabView only in follow mode — not just marking
-                // it non-interactive — is deliberate. It's backed by a real
-                // UIPageViewController; even hit-testing-disabled, it stayed
-                // in the render tree, and something about that (still
-                // uncertain exactly what) kept contesting touches meant for
-                // the map and the toggle button in overview mode: the
-                // toggle didn't reliably work in reverse, and End became
-                // unreachable there entirely. Not rendering it at all during
-                // overview removes any UIKit-bridged sibling from the
-                // hierarchy at that point — nothing left to contest with.
-                if mapMode == .follow {
-                    TabView(selection: $pageIndex) {
-                        overlay(ride, recorder)
-                            .tag(0)
-                        ForEach(Array(customization.dataPages.enumerated()), id: \.element.id) { index, page in
-                            RideDataPageView(
-                                page: page,
-                                recorder: recorder,
-                                ride: ride,
-                                onUpdate: { updated in
-                                    var c = customization
-                                    c.dataPages[index] = updated
-                                    appModel.updateCustomization(c)
-                                },
-                                onDeletePage: customization.dataPages.count > 1 ? {
-                                    var c = customization
-                                    c.dataPages.remove(at: index)
-                                    appModel.updateCustomization(c)
-                                    pageIndex = min(pageIndex, c.dataPages.count)
-                                } : nil,
-                                onAddPage: customization.dataPages.count < RideScreenCustomization.maxDataPages ? {
-                                    var c = customization
-                                    c.dataPages.append(RideDataPage(metrics: [.currentSpeed]))
-                                    appModel.updateCustomization(c)
-                                } : nil
-                            )
-                            .tag(index + 1)
-                        }
+                TabView(selection: $pageIndex) {
+                    overlay(ride, recorder)
+                        .tag(0)
+                    ForEach(Array(customization.dataPages.enumerated()), id: \.element.id) { index, page in
+                        RideDataPageView(
+                            page: page,
+                            recorder: recorder,
+                            ride: ride,
+                            onUpdate: { updated in
+                                var c = customization
+                                c.dataPages[index] = updated
+                                appModel.updateCustomization(c)
+                            },
+                            onDeletePage: customization.dataPages.count > 1 ? {
+                                var c = customization
+                                c.dataPages.remove(at: index)
+                                appModel.updateCustomization(c)
+                                pageIndex = min(pageIndex, c.dataPages.count)
+                            } : nil,
+                            onAddPage: customization.dataPages.count < RideScreenCustomization.maxDataPages ? {
+                                var c = customization
+                                c.dataPages.append(RideDataPage(metrics: [.currentSpeed]))
+                                appModel.updateCustomization(c)
+                            } : nil
+                        )
+                        .tag(index + 1)
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .always))
-                    .indexViewStyle(.page(backgroundDisplayMode: .interactive))
-                    .ignoresSafeArea(edges: .bottom)
-
-                    mapModeToggle(ride)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                        .padding(.trailing, LaneLineDesign.Spacing.medium)
-                } else {
-                    overviewControls(ride, recorder)
                 }
+                .tabViewStyle(.page(indexDisplayMode: .always))
+                .indexViewStyle(.page(backgroundDisplayMode: .interactive))
+                .ignoresSafeArea(edges: .bottom)
+
+                mapModeToggle
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                    .padding(.trailing, LaneLineDesign.Spacing.medium)
             } else {
                 ProgressView()
             }
@@ -99,6 +75,16 @@ struct ActiveNavigationView: View {
                 lyrics: services.lyricsService,
                 defaultPlaylistID: appModel.riderProfile.defaultRidePlaylistID
             )
+        }
+        .sheet(isPresented: $showOverviewSheet) {
+            if let ride, let recorder {
+                RouteOverviewSheet(
+                    ride: ride,
+                    recorder: recorder,
+                    largerControls: largerControls,
+                    onEndRide: { record in appModel.finishRide(with: record) }
+                )
+            }
         }
         .onAppear {
             let model = ActiveRideModel(
@@ -196,20 +182,9 @@ struct ActiveNavigationView: View {
                 .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
             }
         }
-        // Forces MapKit to tear down and recreate its camera controller on
-        // every follow/overview toggle. Without this, once the rider pans
-        // or pinches during overview (the whole point of that mode), the
-        // Map silently takes gesture ownership of the camera and stops
-        // honoring further programmatic `camera = ...` assignments — so
-        // tapping back to follow moved `camera` in state but the on-screen
-        // map never actually snapped back. A fresh id means a fresh
-        // controller with no gesture history, so the reassigned position
-        // always takes.
-        .id(mapMode)
         .mapStyle(.standard(elevation: .realistic))
         .ignoresSafeArea()
         .onChange(of: ride.progressMeters, initial: true) {
-            guard mapMode == .follow else { return }
             // Duration runs a touch past the 1s tick interval so consecutive
             // camera animations always overlap slightly instead of settling
             // and re-starting each tick — that dead stop-start is what read
@@ -230,47 +205,21 @@ struct ActiveNavigationView: View {
         )
     }
 
-    /// North-up, whole route fit to bounds with generous padding — same
-    /// bounding approach `RouteDetailView` uses for its preview map.
-    private func overviewRegion(_ ride: ActiveRideModel) -> MKCoordinateRegion {
-        let coordinates = ride.route.allCoordinates
-        guard !coordinates.isEmpty else {
-            return MKCoordinateRegion(
-                center: ride.currentCoordinate,
-                latitudinalMeters: 1500, longitudinalMeters: 1500
-            )
-        }
-        let lats = coordinates.map(\.latitude)
-        let lons = coordinates.map(\.longitude)
-        return MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: (lats.min()! + lats.max()!) / 2,
-                longitude: (lons.min()! + lons.max()!) / 2
-            ),
-            span: MKCoordinateSpan(
-                latitudeDelta: max(0.01, (lats.max()! - lats.min()!) * 1.35),
-                longitudeDelta: max(0.01, (lons.max()! - lons.min()!) * 1.35)
-            )
-        )
-    }
-
-    /// Explicit switch, not gesture-detection: tapping is the only way in
-    /// or out of overview, so a mid-ride pinch to glance ahead doesn't
-    /// accidentally strand the rider out of follow mode.
-    private func mapModeToggle(_ ride: ActiveRideModel) -> some View {
+    /// Opens the route overview as a separate modal sheet rather than
+    /// toggling this same Map's mode in place. That in-place toggle was
+    /// rebuilt three times this session (disabling TabView's hit-testing,
+    /// not rendering TabView at all, forcing the Map's camera controller to
+    /// reset) and something about sharing one Map/camera binding between
+    /// follow and overview kept breaking the return trip regardless. A
+    /// sheet sidesteps the whole question: it gets its own Map with no
+    /// shared camera state, and dismissal (drag down or the button inside)
+    /// is SwiftUI's own well-tested mechanism rather than custom toggle
+    /// logic — the ride screen underneath never changes mode at all.
+    private var mapModeToggle: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.4)) {
-                switch mapMode {
-                case .follow:
-                    mapMode = .overview
-                    camera = .region(overviewRegion(ride))
-                case .overview:
-                    mapMode = .follow
-                    camera = .camera(followCamera(ride))
-                }
-            }
+            showOverviewSheet = true
         } label: {
-            Image(systemName: mapMode == .follow ? "map" : "location.north.line.fill")
+            Image(systemName: "map")
                 .font(.system(size: largerControls ? 22 : 18, weight: .semibold))
                 .frame(
                     width: largerControls ? 52 : 44,
@@ -280,40 +229,7 @@ struct ActiveNavigationView: View {
         .buttonStyle(.plain)
         .foregroundStyle(LaneLineDesign.Colors.primary)
         .rideGlass(in: Circle(), interactive: true)
-        .accessibilityLabel(mapMode == .follow ? "Show whole route" : "Resume turn-by-turn view")
-    }
-
-    /// The only UI shown during overview — no TabView present at all, so
-    /// there's nothing left to contest touches with. Deliberately minimal:
-    /// resume navigation, or end the ride. Everything else (metrics, music)
-    /// is back the moment you resume.
-    private func overviewControls(_ ride: ActiveRideModel, _ recorder: RideRecorder) -> some View {
-        VStack {
-            HStack {
-                Spacer()
-                mapModeToggle(ride)
-            }
-            .padding(.top, LaneLineDesign.Spacing.medium)
-            .padding(.trailing, LaneLineDesign.Spacing.medium)
-
-            Spacer()
-
-            Button {
-                ride.end()
-                let record = recorder.finish()
-                appModel.finishRide(with: record)
-            } label: {
-                Label("End Ride", systemImage: "xmark")
-                    .font(.subheadline.weight(.bold))
-                    .frame(maxWidth: 200)
-                    .frame(height: largerControls
-                        ? LaneLineDesign.HitTarget.large
-                        : LaneLineDesign.HitTarget.comfortable)
-            }
-            .prominentRideButtonStyle(tint: LaneLineDesign.Colors.danger)
-            .padding(.bottom, LaneLineDesign.Spacing.xlarge)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityLabel("Show whole route")
     }
 
     // MARK: Overlay stack
@@ -544,6 +460,126 @@ struct ActiveNavigationView: View {
             interactive: true
         )
         .accessibilityLabel(label)
+    }
+}
+
+// MARK: - Route Overview Sheet
+
+/// The whole-route view, presented modally. A separate `Map` instance with
+/// its own camera state — no bindings shared with the turn-by-turn map
+/// underneath — so panning and pinching here can never affect, or get
+/// affected by, the live ride screen. Dismissal (drag down, or "Resume
+/// Navigation") is plain `dismiss()`; the ride screen was never touched
+/// while this was up, so there's nothing to restore.
+private struct RouteOverviewSheet: View {
+    let ride: ActiveRideModel
+    let recorder: RideRecorder
+    let largerControls: Bool
+    let onEndRide: (RideRecord) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var camera: MapCameraPosition
+
+    init(ride: ActiveRideModel, recorder: RideRecorder, largerControls: Bool, onEndRide: @escaping (RideRecord) -> Void) {
+        self.ride = ride
+        self.recorder = recorder
+        self.largerControls = largerControls
+        self.onEndRide = onEndRide
+        _camera = State(initialValue: .region(Self.region(fittingRoute: ride.route, fallbackCenter: ride.currentCoordinate)))
+    }
+
+    var body: some View {
+        ZStack {
+            Map(position: $camera) {
+                ForEach(ride.route.segments) { segment in
+                    MapPolyline(coordinates: segment.geometry.map(\.clCoordinate))
+                        .stroke(
+                            segment.maxGrade > 0.08
+                                ? LaneLineDesign.Colors.warning
+                                : LaneLineDesign.Colors.primary,
+                            style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round)
+                        )
+                }
+                Annotation("", coordinate: ride.currentCoordinate) {
+                    ZStack {
+                        Circle().fill(LaneLineDesign.Colors.primary).frame(width: 30, height: 30)
+                        Circle().strokeBorder(.white, lineWidth: 3).frame(width: 30, height: 30)
+                        Image(systemName: "location.north.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
+                }
+            }
+            .mapStyle(.standard(elevation: .realistic))
+            .ignoresSafeArea()
+
+            VStack {
+                Spacer()
+                VStack(spacing: LaneLineDesign.Spacing.small) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Resume Navigation", systemImage: "location.north.line.fill")
+                            .font(.subheadline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: largerControls
+                                ? LaneLineDesign.HitTarget.large
+                                : LaneLineDesign.HitTarget.comfortable)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(
+                        LaneLineDesign.Colors.primary,
+                        in: RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.large)
+                    )
+
+                    Button {
+                        ride.end()
+                        let record = recorder.finish()
+                        dismiss()
+                        onEndRide(record)
+                    } label: {
+                        Label("End Ride", systemImage: "xmark")
+                            .font(.subheadline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: largerControls
+                                ? LaneLineDesign.HitTarget.large
+                                : LaneLineDesign.HitTarget.comfortable)
+                    }
+                    .prominentRideButtonStyle(tint: LaneLineDesign.Colors.danger)
+                }
+                .padding(LaneLineDesign.Spacing.medium)
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    /// North-up, whole route fit to bounds with generous padding — same
+    /// bounding approach `RouteDetailView` uses for its preview map.
+    private static func region(
+        fittingRoute route: RouteCandidate, fallbackCenter: CLLocationCoordinate2D
+    ) -> MKCoordinateRegion {
+        let coordinates = route.allCoordinates
+        guard !coordinates.isEmpty else {
+            return MKCoordinateRegion(
+                center: fallbackCenter,
+                latitudinalMeters: 1500, longitudinalMeters: 1500
+            )
+        }
+        let lats = coordinates.map(\.latitude)
+        let lons = coordinates.map(\.longitude)
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: (lats.min()! + lats.max()!) / 2,
+                longitude: (lons.min()! + lons.max()!) / 2
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: max(0.01, (lats.max()! - lats.min()!) * 1.35),
+                longitudeDelta: max(0.01, (lons.max()! - lons.min()!) * 1.35)
+            )
+        )
     }
 }
 
