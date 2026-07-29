@@ -9,6 +9,10 @@ protocol LocationServicing: AnyObject, Observable {
     var currentLocation: CLLocation? { get }
     /// Heading in degrees, when available.
     var currentHeading: Double? { get }
+    /// `CLHeading.headingAccuracy` in degrees, alongside `currentHeading` —
+    /// published separately so consumers can apply their own trust
+    /// threshold instead of the coarse valid/invalid check done here.
+    var currentHeadingAccuracy: Double? { get }
     var authorizationStatus: CLAuthorizationStatus { get }
     var isAuthorized: Bool { get }
 
@@ -25,6 +29,7 @@ protocol LocationServicing: AnyObject, Observable {
 final class LocationService: LocationServicing {
     private(set) var currentLocation: CLLocation?
     private(set) var currentHeading: Double?
+    private(set) var currentHeadingAccuracy: Double?
     private(set) var authorizationStatus: CLAuthorizationStatus
 
     var isAuthorized: Bool {
@@ -45,8 +50,11 @@ final class LocationService: LocationServicing {
         proxy.onLocationUpdate = { [weak self] location in
             Task { @MainActor in self?.currentLocation = location }
         }
-        proxy.onHeadingUpdate = { [weak self] heading in
-            Task { @MainActor in self?.currentHeading = heading }
+        proxy.onHeadingUpdate = { [weak self] heading, accuracy in
+            Task { @MainActor in
+                self?.currentHeading = heading
+                self?.currentHeadingAccuracy = accuracy
+            }
         }
         delegateProxy = proxy
 
@@ -85,7 +93,7 @@ final class LocationService: LocationServicing {
     private final class DelegateProxy: NSObject, CLLocationManagerDelegate {
         var onAuthorizationChange: ((CLAuthorizationStatus) -> Void)?
         var onLocationUpdate: ((CLLocation) -> Void)?
-        var onHeadingUpdate: ((Double) -> Void)?
+        var onHeadingUpdate: ((Double, Double) -> Void)?
 
         func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
             onAuthorizationChange?(manager.authorizationStatus)
@@ -98,7 +106,7 @@ final class LocationService: LocationServicing {
 
         func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
             guard newHeading.headingAccuracy >= 0 else { return }
-            onHeadingUpdate?(newHeading.trueHeading)
+            onHeadingUpdate?(newHeading.trueHeading, newHeading.headingAccuracy)
         }
 
         func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -115,6 +123,7 @@ final class LocationService: LocationServicing {
 final class MockLocationService: LocationServicing {
     private(set) var currentLocation: CLLocation?
     private(set) var currentHeading: Double?
+    private(set) var currentHeadingAccuracy: Double?
     private(set) var authorizationStatus: CLAuthorizationStatus = .authorizedWhenInUse
 
     var isAuthorized: Bool { authorizationStatus == .authorizedWhenInUse }
@@ -135,8 +144,26 @@ final class MockLocationService: LocationServicing {
         "Valencia St"
     }
 
-    func setLocation(_ coordinate: CLLocationCoordinate2D, heading: Double? = nil) {
-        currentLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+    func setLocation(
+        _ coordinate: CLLocationCoordinate2D,
+        heading: Double? = nil,
+        headingAccuracy: Double? = nil,
+        course: Double? = nil,
+        courseAccuracy: Double? = nil,
+        speed: Double? = nil
+    ) {
+        currentLocation = CLLocation(
+            coordinate: coordinate,
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            course: course ?? -1,
+            courseAccuracy: courseAccuracy ?? -1,
+            speed: speed ?? -1,
+            speedAccuracy: 5,
+            timestamp: Date()
+        )
         if let heading { currentHeading = heading }
+        if let headingAccuracy { currentHeadingAccuracy = headingAccuracy }
     }
 }
