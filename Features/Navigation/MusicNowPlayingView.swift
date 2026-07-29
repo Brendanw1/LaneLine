@@ -12,10 +12,6 @@ struct MusicNowPlayingView: View {
     let music: any MusicServicing
     let lyrics: any LyricsProviding
     let defaultPlaylistID: String?
-    /// Optional: when presented from the ride screen, lets the floating
-    /// turn banner show a real upcoming maneuver over this sheet. Nil in
-    /// contexts with no active ride (previews, non-navigation entry points).
-    var ride: ActiveRideModel? = nil
 
     @State private var selectedTab: Tab = .lyrics
     @State private var lyricsState: LyricsLoadState = .idle
@@ -42,15 +38,6 @@ struct MusicNowPlayingView: View {
         .legibleAccent(fromHex: music.nowPlaying?.artworkBackgroundColorHex, fallback: LaneLineDesign.Colors.primary)
     }
 
-    /// Same 350 m "approach" threshold `ActiveRideModel` uses to trigger the
-    /// spoken turn warning — a turn is "coming up" here exactly when it
-    /// would also be worth announcing out loud.
-    private var isTurnApproaching: Bool {
-        guard let ride, !ride.isComplete else { return false }
-        if let distance = ride.distanceToNextTurnMeters { return distance <= 350 }
-        return ride.nextSegment == nil && ride.remainingMeters <= 350
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             if let item = music.nowPlaying {
@@ -72,14 +59,6 @@ struct MusicNowPlayingView: View {
         .padding(.top, LaneLineDesign.Spacing.small)
         .background(NowPlayingBackground(colorHex: music.nowPlaying?.artworkBackgroundColorHex))
         .preferredColorScheme(.dark)
-        .overlay(alignment: .top) {
-            if isTurnApproaching, let ride {
-                TurnIslandBanner(ride: ride)
-                    .padding(.top, LaneLineDesign.Spacing.small)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isTurnApproaching)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .task {
@@ -533,39 +512,6 @@ private struct SyncedLyricsView: View {
 }
 
 // MARK: - Turn island
-
-/// An in-app pill styled after the Dynamic Island — dark capsule, near the
-/// same screen position — shown only while a turn is coming up, so
-/// navigation stays visible even with the music sheet covering most of the
-/// screen. This is an app-drawn overlay, not a real system Live Activity:
-/// a true Dynamic Island presence (visible when locked or backgrounded)
-/// needs a separate widget extension target, which is a larger, separate
-/// piece of work.
-private struct TurnIslandBanner: View {
-    let ride: ActiveRideModel
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: ride.nextSegment?.turnType.systemImage ?? "flag.checkered")
-                .font(.system(size: 15, weight: .bold))
-
-            if let distance = ride.distanceToNextTurnMeters {
-                Text(RideFormat.distance(distance))
-                    .font(.system(.subheadline, design: .rounded).weight(.bold))
-            }
-
-            Text(ride.nextSegment?.streetName ?? "Destination")
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Capsule().fill(.black))
-        .shadow(color: .black.opacity(0.45), radius: 12, y: 4)
-        .accessibilityElement(children: .combine)
-    }
-}
 
 #Preview {
     MusicNowPlayingView(music: MockMusicService(), lyrics: MockLyricsProvider(), defaultPlaylistID: "pl.mock-commute")

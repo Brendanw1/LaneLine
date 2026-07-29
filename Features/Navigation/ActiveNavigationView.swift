@@ -97,8 +97,7 @@ struct ActiveNavigationView: View {
             MusicNowPlayingView(
                 music: services.musicService,
                 lyrics: services.lyricsService,
-                defaultPlaylistID: appModel.riderProfile.defaultRidePlaylistID,
-                ride: ride
+                defaultPlaylistID: appModel.riderProfile.defaultRidePlaylistID
             )
         }
         .onAppear {
@@ -197,6 +196,16 @@ struct ActiveNavigationView: View {
                 .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
             }
         }
+        // Forces MapKit to tear down and recreate its camera controller on
+        // every follow/overview toggle. Without this, once the rider pans
+        // or pinches during overview (the whole point of that mode), the
+        // Map silently takes gesture ownership of the camera and stops
+        // honoring further programmatic `camera = ...` assignments — so
+        // tapping back to follow moved `camera` in state but the on-screen
+        // map never actually snapped back. A fresh id means a fresh
+        // controller with no gesture history, so the reassigned position
+        // always takes.
+        .id(mapMode)
         .mapStyle(.standard(elevation: .realistic))
         .ignoresSafeArea()
         .onChange(of: ride.progressMeters, initial: true) {
