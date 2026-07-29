@@ -38,7 +38,17 @@ final class ActiveRideModel {
             ?? CLLocationCoordinate2D(latitude: 37.7702, longitude: -122.4270)
     }
 
-    var currentHeading: Double {
+    /// Camera/marker heading, preferring the phone's real compass so the
+    /// map turns with however the rider is actually holding/facing it —
+    /// route-bearing alone assumes you're pointed exactly along the road,
+    /// which isn't true the moment you glance sideways, walk the bike, or
+    /// drift off-line. Falls back to route bearing when there's no real
+    /// heading (simulator/demo mode, or momentarily poor compass accuracy).
+    var displayHeading: Double {
+        locationService.currentHeading ?? routeBearingHeading
+    }
+
+    private var routeBearingHeading: Double {
         guard let current = point(at: progressMeters),
               let ahead = point(at: progressMeters + 25),
               current.cumulative < ahead.cumulative else { return 0 }

@@ -16,6 +16,17 @@ struct ActiveNavigationView: View {
     @State private var recorder: RideRecorder?
     @State private var pageIndex = 0
     @State private var destinationRacks: [BikeParkingRack] = []
+    @State private var mapMode: RideMapMode = .follow
+
+    private enum RideMapMode {
+        /// Heading-locked POV, camera re-centers every tick — the normal
+        /// turn-by-turn state.
+        case follow
+        /// Whole route fit to bounds, free pan/pinch/rotate — the camera is
+        /// left alone entirely so gestures aren't fighting an auto-recenter
+        /// every second.
+        case overview
+    }
 
     private var customization: RideScreenCustomization { appModel.rideCustomization }
     private var largerControls: Bool {
@@ -170,20 +181,82 @@ struct ActiveNavigationView: View {
         .mapStyle(.standard(elevation: .realistic))
         .ignoresSafeArea()
         .onChange(of: ride.progressMeters, initial: true) {
+            guard mapMode == .follow else { return }
             // Duration runs a touch past the 1s tick interval so consecutive
             // camera animations always overlap slightly instead of settling
             // and re-starting each tick — that dead stop-start is what read
             // as choppy before. Ease in/out reads as far more fluid than
             // linear for the heading swing through a turn specifically.
             withAnimation(.easeInOut(duration: 1.1)) {
-                camera = .camera(MapCamera(
-                    centerCoordinate: ride.currentCoordinate,
-                    distance: 900,
-                    heading: ride.currentHeading,
-                    pitch: 40
-                ))
+                camera = .camera(followCamera(ride))
             }
         }
+        .overlay(alignment: .trailing) {
+            mapModeToggle(ride)
+                .padding(.trailing, LaneLineDesign.Spacing.medium)
+        }
+    }
+
+    private func followCamera(_ ride: ActiveRideModel) -> MapCamera {
+        MapCamera(
+            centerCoordinate: ride.currentCoordinate,
+            distance: 900,
+            heading: ride.displayHeading,
+            pitch: 40
+        )
+    }
+
+    /// North-up, whole route fit to bounds with generous padding — same
+    /// bounding approach `RouteDetailView` uses for its preview map.
+    private func overviewRegion(_ ride: ActiveRideModel) -> MKCoordinateRegion {
+        let coordinates = ride.route.allCoordinates
+        guard !coordinates.isEmpty else {
+            return MKCoordinateRegion(
+                center: ride.currentCoordinate,
+                latitudinalMeters: 1500, longitudinalMeters: 1500
+            )
+        }
+        let lats = coordinates.map(\.latitude)
+        let lons = coordinates.map(\.longitude)
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: (lats.min()! + lats.max()!) / 2,
+                longitude: (lons.min()! + lons.max()!) / 2
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: max(0.01, (lats.max()! - lats.min()!) * 1.35),
+                longitudeDelta: max(0.01, (lons.max()! - lons.min()!) * 1.35)
+            )
+        )
+    }
+
+    /// Explicit switch, not gesture-detection: tapping is the only way in
+    /// or out of overview, so a mid-ride pinch to glance ahead doesn't
+    /// accidentally strand the rider out of follow mode.
+    private func mapModeToggle(_ ride: ActiveRideModel) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.4)) {
+                switch mapMode {
+                case .follow:
+                    mapMode = .overview
+                    camera = .region(overviewRegion(ride))
+                case .overview:
+                    mapMode = .follow
+                    camera = .camera(followCamera(ride))
+                }
+            }
+        } label: {
+            Image(systemName: mapMode == .follow ? "map" : "location.north.line.fill")
+                .font(.system(size: largerControls ? 22 : 18, weight: .semibold))
+                .frame(
+                    width: largerControls ? 52 : 44,
+                    height: largerControls ? 52 : 44
+                )
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(LaneLineDesign.Colors.primary)
+        .rideGlass(in: Circle(), interactive: true)
+        .accessibilityLabel(mapMode == .follow ? "Show whole route" : "Resume turn-by-turn view")
     }
 
     // MARK: Overlay stack
