@@ -32,8 +32,11 @@ Fetched live (and disk-cached) from:
 - [Open-Meteo](https://open-meteo.com/) — Copernicus GLO-90 DEM, CC BY 4.0.
 - [USGS 3DEP Elevation Point Query Service](https://apps.nationalmap.gov/epqs/) — U.S. public domain.
 
-Bundled in `Resources/SFBikewayElevations.json` for the local bikeway network
-only.
+Bundled in `Resources/SFCityElevations.json`, covering every node in the
+bundled street network (`Resources/SFStreetNetwork.json`). Sourced from the
+[USGS National Elevation Dataset](https://www.usgs.gov/3d-elevation-program)
+(U.S. public domain) via the [OpenTopoData](https://www.opentopodata.org/)
+batch API (`ned10m` dataset).
 
 ## Lyrics
 

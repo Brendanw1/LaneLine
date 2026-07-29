@@ -20,13 +20,13 @@ final class CachingElevationProviderTests: XCTestCase {
 
         let seedKey = "37.7805,-122.4644" // Inner Richmond, matches cacheKey format
         let seedData = try JSONEncoder().encode([seedKey: 42.0])
-        try seedData.write(to: tempDir.appendingPathComponent("SFBikewayElevations.json"))
+        try seedData.write(to: tempDir.appendingPathComponent("SFCityElevations.json"))
 
         guard let bundle = Bundle(url: tempDir) else {
             throw XCTSkip("Could not construct a Bundle from a plain directory on this platform")
         }
         XCTAssertNotNil(
-            bundle.url(forResource: "SFBikewayElevations", withExtension: "json"),
+            bundle.url(forResource: "SFCityElevations", withExtension: "json"),
             "sanity check: the seed file must actually be resolvable through Bundle lookup for this test to mean anything"
         )
 

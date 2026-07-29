@@ -40,8 +40,8 @@ targets:
       path: Support/Info.plist
       properties:
         CFBundleDisplayName: LaneLine
-        CFBundleShortVersionString: "1.5.4"
-        CFBundleVersion: "12"
+        CFBundleShortVersionString: "1.6.1"
+        CFBundleVersion: "14"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

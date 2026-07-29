@@ -177,11 +177,12 @@ struct CompositeElevationClient: ElevationProviding {
 
 /// Disk-persisted elevation cache keyed by ~11 m grid cells. SF terrain does
 /// not change; cache entries never expire. Seeded at init from a bundled
-/// pre-fetched lookup covering the local bikeway network, so that network
-/// (the one that's actually reliable — see `LocalBikewayDataSource`) needs
-/// zero live elevation calls on a fresh install. Live fetches for anything
-/// outside that set (e.g. a full OSM-derived graph, when Overpass
-/// cooperates) still work exactly as before and merge into the same cache.
+/// pre-fetched lookup covering every node in the bundled city street network
+/// (`SFStreetNetwork.json`), so a fresh install needs zero live elevation
+/// calls to compute real grade/climb everywhere in the graph, not just on
+/// the bikeway subset. Live fetches for anything outside that set (e.g. a
+/// full OSM-derived graph, when Overpass cooperates) still work exactly as
+/// before and merge into the same cache.
 actor CachingElevationProvider: ElevationProviding {
     private let upstream: any ElevationProviding
     private var cache: [String: Double]
@@ -194,7 +195,7 @@ actor CachingElevationProvider: ElevationProviding {
         self.cacheURL = directory.appending(path: "elevation-cache.json")
 
         var seeded: [String: Double] = [:]
-        if let bundledURL = bundle.url(forResource: "SFBikewayElevations", withExtension: "json"),
+        if let bundledURL = bundle.url(forResource: "SFCityElevations", withExtension: "json"),
            let bundledCache = try? JSONDecoder().decode(
                [String: Double].self, from: Data(contentsOf: bundledURL)
            ) {

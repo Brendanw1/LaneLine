@@ -66,6 +66,17 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     private var graph: RouteGraph?
     private var source: NetworkSource = .bundledSample
 
+    /// Bump whenever a bundled source under `Resources/` changes in a way
+    /// that should invalidate an already-persisted graph — otherwise a
+    /// rider who already has a disk-cached graph from an older build never
+    /// picks up the new data, since `loadCachedGraph` had no way to tell
+    /// "this cache is stale" from "this cache is fine." Found the hard way:
+    /// the elevation bundle went from a 6,789-point bikeway-only subset to
+    /// full city coverage, but every device that had already built and
+    /// cached a graph kept silently serving the old near-zero-grade one.
+    private static let bundledDataVersion = 2
+    private var versionURL: URL { cacheURL.deletingLastPathComponent().appending(path: "route-graph-version.txt") }
+
     var currentSource: NetworkSource { source }
 
     init(
@@ -185,7 +196,9 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     // MARK: Disk cache
 
     private func loadCachedGraph() -> (graph: RouteGraph, date: Date)? {
-        guard let data = try? Data(contentsOf: cacheURL),
+        guard let storedVersion = try? String(contentsOf: versionURL, encoding: .utf8),
+              Int(storedVersion.trimmingCharacters(in: .whitespacesAndNewlines)) == Self.bundledDataVersion,
+              let data = try? Data(contentsOf: cacheURL),
               let cached = try? JSONDecoder().decode(RouteGraph.self, from: data),
               !cached.isEmpty,
               let modified = try? FileManager.default
@@ -197,5 +210,6 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     private func persistGraph(_ graph: RouteGraph) {
         guard let data = try? JSONEncoder().encode(graph) else { return }
         try? data.write(to: cacheURL, options: .atomic)
+        try? String(Self.bundledDataVersion).write(to: versionURL, atomically: true, encoding: .utf8)
     }
 }
