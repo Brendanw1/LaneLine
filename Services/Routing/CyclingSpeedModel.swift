@@ -14,19 +14,52 @@ enum CyclingSpeedModel {
         }
     }
 
-    /// Effective speed on a given grade. Climbing costs ~9% of speed per
-    /// percent of grade (floored — nobody rides below walking pace, they
-    /// walk); descending gains a capped bonus because SF riders brake on
-    /// steep downhills rather than bomb blind intersections.
+    /// Effective speed on a given grade. Climbing cost is piecewise:
+    /// gentle grades lose ~9% of base speed per percent (the linear
+    /// approximation holds for typical SF terrain); past ~8% the slope
+    /// steepens because riders drop into their lowest gear and approach
+    /// walking pace, which floors at ~3 km/h rather than the previous
+    /// 5 km/h — that floor left 10–30% grades indistinguishable, so two
+    /// SF streets of very different steepness cost the same. Descending
+    /// gains a capped bonus because SF riders brake on steep downhills
+    /// rather than bomb blind intersections.
     static func speedKmh(bikeType: BikeType, grade: Double) -> Double {
         let base = baseSpeedKmh(for: bikeType)
         if grade > 0 {
             let climbCostPerPercent = bikeType == .eBike ? 0.035 : 0.09
-            let factor = max(0.25, 1 - grade * 100 * climbCostPerPercent)
+            let climbPct = grade * 100
+            let factor: Double
+            if climbPct < 8 {
+                factor = max(walkingFactor(for: bikeType), 1 - climbPct * climbCostPerPercent)
+            } else {
+                // Past the linear zone, drop faster and floor at walking pace
+                // so 10%/15%/20%/25% climbs differentiate. The steep slope is
+                // tuned so realistic SF grades (10–15%) land in the
+                // grinding-lowest-gear band (3–5 km/h) rather than collapsing
+                // to the floor at 10% as the previous linear model did.
+                let steepSlope = bikeType == .eBike ? 0.025 : 0.030
+                let steepBase = 1 - 8 * climbCostPerPercent
+                factor = max(walkingFactor(for: bikeType), steepBase - (climbPct - 8) * steepSlope)
+            }
             return base * factor
         } else {
             let factor = min(1.35, 1 + abs(grade) * 100 * 0.03)
             return base * factor
+        }
+    }
+
+    /// Walking pace floor per bike type. Real cyclists dismount or shuffle
+    /// at the steepest grades; this is the speed that the model converges
+    /// to rather than allowing negative factors or zero speed. Road bikes
+    /// grind lowest gear; city bikes are slower in general; gravel riders
+    /// are willing to walk more; e-bikes keep moving under motor.
+    private static func walkingFactor(for bikeType: BikeType) -> Double {
+        switch bikeType {
+        case .roadBike: return 0.17  // ~3.4 km/h grinding
+        case .hybridFitness: return 0.18
+        case .gravel: return 0.17
+        case .cityBike: return 0.17
+        case .eBike: return 0.35  // motor still assists under walk speed
         }
     }
 

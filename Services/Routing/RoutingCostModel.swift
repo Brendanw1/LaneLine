@@ -71,11 +71,15 @@ struct RoutingWeights {
             weights.protectedFactor *= 0.9
         case .faster:
             // Near-pure travel time: a rider choosing "faster" accepts
-            // arterials, so infrastructure rewards are switched off — any
-            // residual facility bonus would out-discount the time savings
-            // of a direct arterial and collapse faster into balanced.
+            // arterials and is willing to climb if it's the fastest way,
+            // so infrastructure rewards and perceived climb burden are
+            // switched off — any residual climb penalty would compound
+            // with the speed model's real time cost and collapse faster
+            // into balanced (or worse, force a detour around a 100m climb
+            // to save 30s).
             weights.stressWeight *= 0.25
-            weights.climbSecondsPerMeter *= 0.5
+            weights.climbSecondsPerMeter = 0
+            weights.steepGradePenaltyFactor = 0
             weights.offStreetFactor = 1
             weights.protectedFactor = 1
             weights.bufferedFactor = 1
@@ -93,8 +97,13 @@ struct RoutingWeights {
         case .roadBike:
             // Smooth pavement and predictable streets above all; punchy
             // grades and sketchy surfaces are what road riders route around.
+            // `climbSecondsPerMeter` is a perceived-burden surcharge on top
+            // of the real time cost the speed model already charges — keep
+            // it modest (real climbs feel ~1.5–2× their time delta, not 3×)
+            // so it nudges hill avoidance without making every climb a
+            // prohibitively expensive detour.
             return RoutingWeights(
-                climbSecondsPerMeter: 3.0,
+                climbSecondsPerMeter: 0.5,
                 steepGradeThreshold: 0.08,
                 steepGradePenaltyFactor: 30,
                 stressWeight: 0.9,
@@ -109,7 +118,7 @@ struct RoutingWeights {
             )
         case .hybridFitness:
             return RoutingWeights(
-                climbSecondsPerMeter: 3.0,
+                climbSecondsPerMeter: 0.5,
                 steepGradeThreshold: 0.09,
                 steepGradePenaltyFactor: 22,
                 stressWeight: 1.0,
@@ -124,7 +133,7 @@ struct RoutingWeights {
             )
         case .gravel:
             return RoutingWeights(
-                climbSecondsPerMeter: 2.5,
+                climbSecondsPerMeter: 0.4,
                 steepGradeThreshold: 0.10,
                 steepGradePenaltyFactor: 18,
                 stressWeight: 0.8,
@@ -139,7 +148,7 @@ struct RoutingWeights {
             )
         case .cityBike:
             return RoutingWeights(
-                climbSecondsPerMeter: 4.0,
+                climbSecondsPerMeter: 0.7,
                 steepGradeThreshold: 0.07,
                 steepGradePenaltyFactor: 26,
                 stressWeight: 1.4,
@@ -228,8 +237,17 @@ struct RoutingCostModel {
         }
 
         // Steep descents demand braking and caution, not free speed.
+        // Scale past the threshold so a -25% descent costs materially more
+        // than a -9% one — braking control, intersection risk, and brake
+        // fade all grow with steepness rather than appearing at one fixed
+        // grade. The slope has to be aggressive enough to overcome the
+        // speed model's 1.35× descent cap, which otherwise makes steeper
+        // descents *cheaper* in time terms despite being more dangerous.
         if edge.grade < weights.descentCautionThreshold {
-            cost += time * (weights.descentCautionFactor - 1)
+            let extraCautionPerPercent = (weights.descentCautionFactor - 1) * 2.0
+            let pastThresholdPct = abs(edge.grade) - abs(weights.descentCautionThreshold)
+            let caution = weights.descentCautionFactor - 1 + pastThresholdPct * extraCautionPerPercent
+            cost += time * caution
         }
 
         // Low-confidence attribution earns a mild hedge so uncertain edges

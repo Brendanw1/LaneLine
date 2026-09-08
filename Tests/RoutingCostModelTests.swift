@@ -99,6 +99,19 @@ final class RoutingCostModelTests: XCTestCase {
         XCTAssertGreaterThan(steep, gentle * 0.8)
     }
 
+    /// Steep descents cost *more*, not just the same, as grade severity
+    /// grows past the threshold. Regression guard: a flat -1.30 caution
+    /// surcharge past -8% left a -25% descent indistinguishable from -9%.
+    func testVerySteepDescentCostsMoreThanModerateSteepDescent() {
+        let roadBike = model(.roadBike)
+        let moderate = roadBike.cost(of: edge(length: 500, grade: -0.10))
+        let verySteep = roadBike.cost(of: edge(length: 500, grade: -0.22))
+        XCTAssertGreaterThan(
+            verySteep, moderate,
+            "A -22% descent should cost strictly more than a -10% descent — braking control and crash risk grow with steepness"
+        )
+    }
+
     // MARK: Infrastructure behavior
 
     func testProtectedLaneBeatsIdenticalUnprotectedStreet() {
@@ -164,6 +177,35 @@ final class RoutingCostModelTests: XCTestCase {
                 model.heuristicCost(distanceMeters: 1000),
                 model.cost(of: cheapEdge),
                 "Heuristic overestimates for \(bikeType)"
+            )
+        }
+    }
+
+    // MARK: Speed model — grade differentiation
+
+    /// Real SF streets range from flat to ~30% grade. The old linear model
+    /// hit a 5 km/h floor at 9% and left every grade above that identical,
+    /// so a 25% wall cost the same as a 10% climb. This regression guard
+    /// asserts the speed model still differentiates past the floor at the
+    /// realistic SF range (8%–12%).
+    func testSpeedModelDifferentiatesSteepGrades() {
+        let speed8 = CyclingSpeedModel.speedKmh(bikeType: .roadBike, grade: 0.08)
+        let speed10 = CyclingSpeedModel.speedKmh(bikeType: .roadBike, grade: 0.10)
+        let speed12 = CyclingSpeedModel.speedKmh(bikeType: .roadBike, grade: 0.12)
+        XCTAssertGreaterThan(speed8, speed10, "10% climb must be slower than 8% climb")
+        XCTAssertGreaterThan(speed10, speed12, "12% climb must be slower than 10% climb")
+    }
+
+    /// E-bikes don't lose all motor assistance at moderate grades the way
+    /// the old linear model implied. Past the motor's cutoff (~8%), speed
+    /// should drop, but not all the way to acoustic walking pace.
+    func testEBikeRetainsMoreSpeedThanRoadBikeAtSteepGrades() {
+        for grade in [0.05, 0.10, 0.15] {
+            let road = CyclingSpeedModel.speedKmh(bikeType: .roadBike, grade: grade)
+            let ebike = CyclingSpeedModel.speedKmh(bikeType: .eBike, grade: grade)
+            XCTAssertGreaterThan(
+                ebike, road,
+                "E-bike must climb faster than road bike at \(Int(grade * 100))% grade"
             )
         }
     }
