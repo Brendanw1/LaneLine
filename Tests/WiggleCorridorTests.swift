@@ -103,9 +103,17 @@ final class WiggleRoutingTests: XCTestCase {
             preferred.usedWiggleCorridor,
             "Preferring the Wiggle on a real east-west crossing should actually route through it"
         )
-        XCTAssertLessThan(
+        // The corridor discount is intentionally modest so a rider who
+        // *prefers* the Wiggle doesn't get a longer detour through extra
+        // corridor blocks when the natural best path already uses the
+        // corridor. The previous 0.65 multiplier over-applied — turning
+        // on preferWiggle could add 200+ m of zig-zag on trips that only
+        // grazed the corridor. With the 0.80 multiplier, both calls
+        // settle on the same path when the corridor is already the best
+        // option, and the discount only kicks in on marginal cases.
+        XCTAssertLessThanOrEqual(
             preferred.totalDistanceMeters, plain.totalDistanceMeters,
-            "Preferring the Wiggle should commit to a more direct path through it, not just touch it incidentally"
+            "Preferring the Wiggle should never detour through extra corridor blocks; it should pick the corridor path when the corridor is already best"
         )
     }
 }

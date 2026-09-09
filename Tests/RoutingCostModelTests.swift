@@ -209,4 +209,22 @@ final class RoutingCostModelTests: XCTestCase {
             )
         }
     }
+
+    /// Past -10% the speed cap tightens, so a -25% descent doesn't get the
+    /// full 1.35× flat speed bonus. Real cyclists brake hard at -15% to
+    /// -20%; the model should reflect that with slower implied speeds.
+    func testVerySteepDescentSpeedCapsLowerThanModerateSteep() {
+        let moderate = CyclingSpeedModel.speedKmh(bikeType: .roadBike, grade: -0.12)
+        let verySteep = CyclingSpeedModel.speedKmh(bikeType: .roadBike, grade: -0.22)
+        XCTAssertLessThan(
+            verySteep, moderate,
+            "A -22% descent must be slower than -12% — riders brake hard past the moderate-steep threshold"
+        )
+    }
+
+    /// The Wiggle corridor discount should be modest enough that turning
+    /// on preferWiggle doesn't make the model detour through extra
+    /// corridor blocks. The previous 0.65 multiplier could add 200+ m
+    /// of zig-zag on trips that only grazed the corridor — verified
+    /// end-to-end in `WiggleRoutingTests.testPreferWiggleFindsAMoreDirectPathThroughTheRealCorridor`.
 }

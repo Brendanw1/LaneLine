@@ -196,9 +196,14 @@ struct RoutingCostModel {
     let preferWiggle: Bool
 
     /// Discount applied to Wiggle-corridor edges when `preferWiggle` is on.
-    /// Flat across bike types and strategies — this is an explicit rider
-    /// request, not a tunable tradeoff like climb tolerance.
-    private static let wiggleFactor: Double = 0.65
+    /// Modest (20% off, not 35%) — enough to nudge A* toward the corridor
+    /// when it ties or marginally loses on flat alternatives, but small
+    /// enough that the model won't detour through extra Wiggle blocks just
+    /// to harvest more discount on a trip that grazes the corridor
+    /// incidentally. A rider who actually wants the full Wiggle detour can
+    /// still get it via the east-west cases where the discount pushes the
+    /// corridor past flat alternatives.
+    private static let wiggleFactor: Double = 0.80
 
     init(profile: RiderProfile, strategy: RouteStrategyType, preferWiggle: Bool = false) {
         self.bikeType = profile.bikeType
@@ -271,11 +276,18 @@ struct RoutingCostModel {
         }
     }
 
-    /// Admissible A* heuristic: straight-line distance at the fastest
-    /// achievable speed, discounted below the deepest facility reward so it
-    /// never overestimates remaining cost.
+    /// Admissible A* heuristic: straight-line distance at a fast but
+    /// realistic upper-bound speed. The previous formula used `0.75 *
+    /// distance / (baseSpeed * 1.4 / 3.6)` which algebraically inflated
+    /// the implied speed to ~37 km/h for a road bike — wildly optimistic,
+    /// causing A* to explore far more nodes than necessary. Removing the
+    /// `0.75` multiplier keeps the same 1.4× speed bound (necessary for
+    /// admissibility against the cheapest synthetic downhill-protected
+    /// edge) but produces ~28 km/h instead of ~37 km/h, which is enough
+    /// tighter for A* to prune effectively while still never
+    /// overestimating remaining cost.
     func heuristicCost(distanceMeters: Double) -> Double {
         let maxSpeedMs = CyclingSpeedModel.baseSpeedKmh(for: bikeType) * 1.4 / 3.6
-        return 0.75 * distanceMeters / maxSpeedMs
+        return distanceMeters / maxSpeedMs
     }
 }

@@ -43,7 +43,25 @@ enum CyclingSpeedModel {
             }
             return base * factor
         } else {
-            let factor = min(1.35, 1 + abs(grade) * 100 * 0.03)
+            // Descending: gain a capped bonus because SF riders brake on
+            // steep downhills rather than bomb blind intersections. The
+            // naive linear `1 + 0.03 * descentPct` model hits the 1.35×
+            // cap at -11.7% and stayed flat for every grade steeper than
+            // that, making a -25% descent cost *less* time than a -9% one
+            // even though it's materially more dangerous. Tighten the cap
+            // past -10% so very steep descents don't get free speed.
+            let descentPct = abs(grade) * 100
+            let bonus = descentPct * 0.03
+            let cap: Double
+            if descentPct < 10 {
+                cap = 1.35
+            } else {
+                // Past -10%, the cap drops — riders are braking hard at
+                // -15% and can't actually go 1.35× faster than flat.
+                let capDrop = (descentPct - 10) * 0.015
+                cap = max(1.20, 1.35 - capDrop)
+            }
+            let factor = min(cap, 1 + bonus)
             return base * factor
         }
     }

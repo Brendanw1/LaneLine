@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Where the currently served graph came from — surfaced in Settings so the
 /// rider can see whether routing runs on live city data or the bundled sample.
@@ -66,16 +67,16 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     private var graph: RouteGraph?
     private var source: NetworkSource = .bundledSample
 
-    /// Bump whenever a bundled source under `Resources/` changes in a way
-    /// that should invalidate an already-persisted graph — otherwise a
-    /// rider who already has a disk-cached graph from an older build never
-    /// picks up the new data, since `loadCachedGraph` had no way to tell
-    /// "this cache is stale" from "this cache is fine." Found the hard way:
-    /// the elevation bundle went from a 6,789-point bikeway-only subset to
-    /// full city coverage, but every device that had already built and
-    /// cached a graph kept silently serving the old near-zero-grade one.
-    private static let bundledDataVersion = 3
-    private var versionURL: URL { cacheURL.deletingLastPathComponent().appending(path: "route-graph-version.txt") }
+    /// Hash of every bundled source file that affects the resulting graph.
+    /// Computed on demand and cached alongside the graph so a stale cache
+    /// from an older build is detected automatically — the previous manual
+    /// `bundledDataVersion` constant got forgotten at least once, leaving
+    /// devices silently serving a pre-fix graph after a bundle update.
+    /// First-call cost is ~100 ms for SHA-256 over ~40 MB of bundled
+    /// resources; subsequent reads hit `cachedBundleFingerprint` and pay
+    /// nothing.
+    private var cachedBundleFingerprint: String?
+    private var versionURL: URL { cacheURL.deletingLastPathComponent().appending(path: "route-graph-fingerprint.txt") }
 
     var currentSource: NetworkSource { source }
 
@@ -196,8 +197,9 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     // MARK: Disk cache
 
     private func loadCachedGraph() -> (graph: RouteGraph, date: Date)? {
-        guard let storedVersion = try? String(contentsOf: versionURL, encoding: .utf8),
-              Int(storedVersion.trimmingCharacters(in: .whitespacesAndNewlines)) == Self.bundledDataVersion,
+        guard let fingerprint = bundledSourceFingerprint(),
+              let storedFingerprint = try? String(contentsOf: versionURL, encoding: .utf8),
+              storedFingerprint.trimmingCharacters(in: .whitespacesAndNewlines) == fingerprint,
               let data = try? Data(contentsOf: cacheURL),
               let cached = try? JSONDecoder().decode(RouteGraph.self, from: data),
               !cached.isEmpty,
@@ -210,6 +212,51 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     private func persistGraph(_ graph: RouteGraph) {
         guard let data = try? JSONEncoder().encode(graph) else { return }
         try? data.write(to: cacheURL, options: .atomic)
-        try? String(Self.bundledDataVersion).write(to: versionURL, atomically: true, encoding: .utf8)
+        if let fingerprint = bundledSourceFingerprint() {
+            try? fingerprint.write(to: versionURL, atomically: true, encoding: .utf8)
+        }
     }
+
+    /// SHA-256 of every bundled source whose contents feed the resulting
+    /// graph. Any change to these files invalidates the on-disk cache
+    /// automatically, so a developer who edits `SFCityElevations.json`
+    /// doesn't need to remember to bump a version constant — the next
+    /// launch detects the mismatch and rebuilds. Tests build the graph
+    /// in-memory and don't write the cache file, so a missing bundle
+    /// resource (the test target doesn't copy Resources) is treated as a
+    /// valid empty-contribution fingerprint rather than an error.
+    private func bundledSourceFingerprint() -> String? {
+        if let cached = cachedBundleFingerprint { return cached }
+        var hasher = SHA256()
+        var contributed = false
+        for resource in Self.bundledSourceNames {
+            guard let url = Bundle.main.url(forResource: resource, withExtension: nil) else { continue }
+            contributed = true
+            // Mix the resource name into the hash so a renamed file doesn't
+            // silently match a stale cache entry.
+            hasher.update(data: Data(resource.utf8))
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+               let size = attrs[.size] as? Int {
+                var sizeBE = size.bigEndian
+                withUnsafeBytes(of: &sizeBE) { hasher.update(bufferPointer: $0) }
+            }
+            if let chunk = try? Data(contentsOf: url, options: .mappedIfSafe) {
+                hasher.update(data: chunk)
+            }
+        }
+        guard contributed else { return nil }
+        let digest = hasher.finalize()
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        cachedBundleFingerprint = hex
+        return hex
+    }
+
+    /// Names of the bundled source files whose contents feed the graph.
+    /// Add to this list whenever a new bundled resource is incorporated.
+    private static let bundledSourceNames: [String] = [
+        "SFStreetNetwork",
+        "MTA_Bike_Network_Linear_Features",
+        "Protected_Bike_Lanes",
+        "SFCityElevations",
+    ]
 }
