@@ -21,7 +21,10 @@ struct RouteComparisonView: View {
 
                 ForEach(candidates) { candidate in
                     NavigationLink {
-                        RouteDetailView(route: candidate)
+                        RouteDetailView(
+                            route: candidate,
+                            isRecommended: candidates.isRecommended(candidate, for: appModel.riderProfile)
+                        )
                     } label: {
                         RouteCandidateCard(
                             candidate: candidate,

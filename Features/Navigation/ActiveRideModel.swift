@@ -179,6 +179,13 @@ final class ActiveRideModel {
     private var announcedImminent: Set<Int> = []
     private var announcedStart = false
     private var announcedArrival = false
+    /// Destination approach phrases fire once per threshold as the rider
+    /// closes in on the endpoint — separate flags so a reroute near the
+    /// destination re-fires both phrases (the rider clearly needs the
+    /// reminder after their route changed), but the same ride doesn't
+    /// re-fire them on every tick once the distance dips under 500m.
+    private var announcedDestinationApproach500 = false
+    private var announcedDestinationApproach100 = false
     /// The turnKey the most recently queued approach/imminent phrase was
     /// about. `AVSpeechSynthesizer.speak()` queues rather than interrupts,
     /// so on a route with short blocks a still-queued phrase for turn N can
@@ -453,6 +460,8 @@ final class ActiveRideModel {
         announcedApproach = []
         announcedImminent = []
         announcedArrival = false
+        announcedDestinationApproach500 = false
+        announcedDestinationApproach100 = false
         lastAnnouncedTurnKey = nil
     }
 
@@ -472,6 +481,18 @@ final class ActiveRideModel {
                 voiceGuide.announce(RideAnnouncements.arrival)
             }
             return
+        }
+
+        // Destination-approach phrases fire on the remaining distance
+        // regardless of upcoming turns — once the rider is closing in on
+        // the endpoint they need a countdown even if the next turn is
+        // still hundreds of meters out.
+        if !announcedDestinationApproach500, remainingMeters <= 500, remainingMeters > 100 {
+            announcedDestinationApproach500 = true
+            voiceGuide.announce(RideAnnouncements.destinationApproach(inMeters: remainingMeters))
+        } else if !announcedDestinationApproach100, remainingMeters <= 100 {
+            announcedDestinationApproach100 = true
+            voiceGuide.announce(RideAnnouncements.destinationApproach(inMeters: remainingMeters))
         }
 
         guard let next = nextSegment,

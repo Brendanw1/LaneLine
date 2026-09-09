@@ -8,6 +8,11 @@ struct RouteDetailView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.services) private var services
     let route: RouteCandidate
+    /// Whether this route was the comparison view's Recommended pick for
+    /// the rider's profile. Optional because the detail view is also
+    /// reachable from preview/standalone contexts; the comparison view
+    /// always passes the value computed at tap time.
+    let isRecommended: Bool?
 
     @State private var destinationRacks: [BikeParkingRack] = []
     /// True once the docked "Start Ride" button (the real one, at the end of
@@ -200,14 +205,11 @@ struct RouteDetailView: View {
         CardContainer {
             VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.medium) {
                 HStack {
-                    // The "Recommended" badge belongs on the comparison
-                    // screen — it's only meaningful when the user can see
-                    // *all* candidates. Here on the detail view we just
-                    // show the strategy so the rider knows what tradeoff
-                    // this route is making; the comparison view already
-                    // told them which one was Recommended when they
-                    // tapped in.
-                    StrategyBadge(strategy: route.strategyType, isRecommended: false)
+                    // The "Recommended" badge is computed against the
+                    // full candidate set on the comparison screen and
+                    // passed in — the detail view alone has no way to
+                    // compute it (it only sees one route).
+                    StrategyBadge(strategy: route.strategyType, isRecommended: isRecommended ?? false)
                     if route.usedWiggleCorridor {
                         WiggleBadge()
                     }
@@ -448,7 +450,7 @@ private struct DockedButtonPositionKey: PreferenceKey {
 
 #Preview {
     NavigationStack {
-        RouteDetailView(route: PreviewData.sampleCandidates[0])
+        RouteDetailView(route: PreviewData.sampleCandidates[0], isRecommended: true)
     }
     .serviceContainer(.preview())
     .environment(PreviewData.appModel())

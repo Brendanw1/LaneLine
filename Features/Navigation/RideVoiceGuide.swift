@@ -25,6 +25,17 @@ enum RideAnnouncements {
     static let rerouted = "Route updated."
     static let arrival = "You have arrived at your destination."
 
+    /// Spoken approach to the destination, fired once when the rider
+    /// crosses each threshold so they get an early warning before the
+    /// arrival phrase (which fires when `remainingMeters < 10`). Two
+    /// thresholds instead of one keeps the guidance useful for both
+    /// fast descents into a familiar endpoint (need early heads-up)
+    /// and slow climbs approaching a turn (the late heads-up is
+    /// enough).
+    static func destinationApproach(inMeters: Double) -> String {
+        "\(spokenDistance(inMeters)) to your destination."
+    }
+
     private static func turnPhrase(_ turn: TurnType, street: String?) -> String {
         let action: String
         switch turn {
