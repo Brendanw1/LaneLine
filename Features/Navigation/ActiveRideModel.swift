@@ -152,6 +152,12 @@ final class ActiveRideModel {
 
     private var flattened: [FlattenedPoint] = []
     private var segmentBoundaries: [Double] = []
+    /// Cell index keyed by ~75 m of latitude (~0.00067°), so any location
+    /// snap only walks the handful of route vertices that fall in the
+    /// rider's cell and the 8 neighbours — O(1) instead of O(n) over the
+    /// full flattened polyline at every tick. Rebuilt on every
+    /// `rebuildGeometry()` since the route can change at start or reroute.
+    private var flattenedGrid: [GridKey: [Int]] = [:]
     private let bikeType: BikeType
     private let profile: RiderProfile
     private var tickTask: Task<Void, Never>?
@@ -201,6 +207,7 @@ final class ActiveRideModel {
     private func rebuildGeometry() {
         flattened = []
         segmentBoundaries = []
+        flattenedGrid = [:]
         var cumulative: Double = 0
 
         for (segmentIndex, segment) in route.segments.enumerated() {
@@ -219,6 +226,27 @@ final class ActiveRideModel {
                 }
             }
         }
+        rebuildGrid()
+    }
+
+    /// Populate the spatial cell index used by `snapToRoute`. Each
+    /// vertex is added to its own cell; lookups walk the cell and the 8
+    /// neighbours so a fix near a cell boundary still finds every nearby
+    /// route vertex without scanning the full polyline.
+    private func rebuildGrid() {
+        for (index, point) in flattened.enumerated() {
+            let key = Self.gridKey(for: point.coordinate.clCoordinate)
+            flattenedGrid[key, default: []].append(index)
+        }
+    }
+
+    private static let gridCellDegrees: Double = 0.00067  // ~75 m latitude
+    private typealias GridKey = Int  // packed: (latCell << 16) | lonCell
+
+    private static func gridKey(for coordinate: CLLocationCoordinate2D) -> GridKey {
+        let latCell = Int((coordinate.latitude / gridCellDegrees).rounded())
+        let lonCell = Int((coordinate.longitude / gridCellDegrees).rounded())
+        return (latCell << 16) ^ lonCell
     }
 
     private var currentSegmentIndex: Int? {
@@ -332,11 +360,28 @@ final class ActiveRideModel {
             // than the screen."
             voiceGuide?.stopSpeaking()
             route = fresh
-            progressMeters = 0
-            isOffRoute = false
-            offRouteSeconds = 0
-            resetAnnouncements()
             rebuildGeometry()
+            // Snap progress to the rider's actual position on the new
+            // route rather than resetting to 0 — the rider is physically
+            // partway through their trip, and showing them at the *start*
+            // of the new route would make the dot jump backwards and the
+            // camera spin to the corridor's origin. If the snap lands
+            // within tolerance, the rider is on the new route and we
+            // resume tracking from their position. If not, we keep them
+            // at the route's start (the closest the new route gets to
+            // their current position) and mark off-route so the next tick
+            // can decide whether to plan again — never silently resume
+            // progress on a route the rider isn't actually on.
+            if let snapped = snapToRoute(origin),
+               snapped.distanceFromRoute <= liveTrackingToleranceMeters {
+                progressMeters = snapped.progress
+                isOffRoute = false
+            } else {
+                progressMeters = 0
+                isOffRoute = true
+                offRouteSeconds = 0
+            }
+            resetAnnouncements()
             voiceGuide?.announce(RideAnnouncements.rerouted)
         }
     }
@@ -349,16 +394,37 @@ final class ActiveRideModel {
         guard !isPaused, !isComplete else { return }
         elapsedSeconds += deltaSeconds
 
-        if let location = locationService.currentLocation,
-           let snapped = snapToRoute(location.coordinate) {
-            if snapped.distanceFromRoute <= liveTrackingToleranceMeters {
-                isOffRoute = false
-                offRouteSeconds = 0
-                // Never move backwards on GPS jitter.
-                progressMeters = max(progressMeters, snapped.progress)
+        if let location = locationService.currentLocation {
+            // A real fix exists. snapToRoute returns nil when no route
+            // vertex falls within the grid's walk window — i.e., the
+            // rider is too far from the route to be considered on it,
+            // not "no GPS." Treat that as off-route, not as the
+            // simulation fallback (which only kicks in for genuinely
+            // missing fixes).
+            if let snapped = snapToRoute(location.coordinate) {
+                if snapped.distanceFromRoute <= liveTrackingToleranceMeters {
+                    isOffRoute = false
+                    offRouteSeconds = 0
+                    // Never move backwards on GPS jitter.
+                    progressMeters = max(progressMeters, snapped.progress)
+                } else {
+                    // Real fix, far from the route: the rider left the line.
+                    // Freeze progress and re-plan from where they actually are.
+                    offRouteSeconds += deltaSeconds
+                    if offRouteSeconds >= offRouteRerouteAfterSeconds, !isRerouting {
+                        offRouteSeconds = 0
+                        if !isOffRoute {
+                            isOffRoute = true
+                            voiceGuide?.announce(RideAnnouncements.offRoute)
+                        }
+                        Task { await reroute() }
+                    }
+                }
             } else {
-                // Real fix, far from the route: the rider left the line.
-                // Freeze progress and re-plan from where they actually are.
+                // Fix exists but no nearby vertex in the grid — treat as
+                // off-route without forcing a long cell walk. The rider
+                // is clearly not on the line; reroute logic still kicks
+                // in after the sustained-off-route threshold.
                 offRouteSeconds += deltaSeconds
                 if offRouteSeconds >= offRouteRerouteAfterSeconds, !isRerouting {
                     offRouteSeconds = 0
@@ -442,12 +508,25 @@ final class ActiveRideModel {
     ) -> (progress: Double, distanceFromRoute: Double)? {
         guard !flattened.isEmpty else { return nil }
         var best: (progress: Double, distance: Double)?
-        for candidatePoint in flattened {
-            let distance = GeoMath.distanceMeters(
-                from: candidatePoint.coordinate.clCoordinate, to: coordinate
-            )
-            if distance < (best?.distance ?? .infinity) {
-                best = (candidatePoint.cumulative, distance)
+        // Walk the cell containing the fix plus the 8 neighbouring cells,
+        // so a fix near a cell boundary still sees every nearby vertex
+        // without scanning the full polyline. O(1) per tick instead of
+        // O(n) — measurable on city-scale routes with 1k+ vertices.
+        let centerLatCell = Int((coordinate.latitude / Self.gridCellDegrees).rounded())
+        let centerLonCell = Int((coordinate.longitude / Self.gridCellDegrees).rounded())
+        for dLat in -1...1 {
+            for dLon in -1...1 {
+                let key = ((centerLatCell + dLat) << 16) ^ (centerLonCell + dLon)
+                guard let indices = flattenedGrid[key] else { continue }
+                for index in indices {
+                    let candidatePoint = flattened[index]
+                    let distance = GeoMath.distanceMeters(
+                        from: candidatePoint.coordinate.clCoordinate, to: coordinate
+                    )
+                    if distance < (best?.distance ?? .infinity) {
+                        best = (candidatePoint.cumulative, distance)
+                    }
+                }
             }
         }
         guard let best else { return nil }

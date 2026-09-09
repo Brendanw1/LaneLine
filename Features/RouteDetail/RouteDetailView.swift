@@ -200,10 +200,14 @@ struct RouteDetailView: View {
         CardContainer {
             VStack(alignment: .leading, spacing: LaneLineDesign.Spacing.medium) {
                 HStack {
-                    StrategyBadge(
-                        strategy: route.strategyType,
-                        isRecommended: route.strategyType == .balanced
-                    )
+                    // The "Recommended" badge belongs on the comparison
+                    // screen — it's only meaningful when the user can see
+                    // *all* candidates. Here on the detail view we just
+                    // show the strategy so the rider knows what tradeoff
+                    // this route is making; the comparison view already
+                    // told them which one was Recommended when they
+                    // tapped in.
+                    StrategyBadge(strategy: route.strategyType, isRecommended: false)
                     if route.usedWiggleCorridor {
                         WiggleBadge()
                     }

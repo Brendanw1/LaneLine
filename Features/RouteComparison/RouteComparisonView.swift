@@ -9,6 +9,7 @@ struct RouteComparisonView: View {
     let origin: CLLocationCoordinate2D
     let destination: SelectedDestination
 
+    @Environment(AppModel.self) private var appModel
     @State private var selectedRouteID: UUID?
 
     var body: some View {
@@ -24,7 +25,7 @@ struct RouteComparisonView: View {
                     } label: {
                         RouteCandidateCard(
                             candidate: candidate,
-                            isRecommended: candidate.strategyType == .balanced
+                            isRecommended: candidates.isRecommended(candidate, for: appModel.riderProfile)
                         )
                     }
                     .buttonStyle(.plain)
