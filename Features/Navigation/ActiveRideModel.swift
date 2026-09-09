@@ -486,11 +486,19 @@ final class ActiveRideModel {
         // Destination-approach phrases fire on the remaining distance
         // regardless of upcoming turns — once the rider is closing in on
         // the endpoint they need a countdown even if the next turn is
-        // still hundreds of meters out.
-        if !announcedDestinationApproach500, remainingMeters <= 500, remainingMeters > 100 {
+        // still hundreds of meters out. Skip if an imminent turn phrase
+        // was just announced (within 60 m of a turn), to avoid queueing
+        // two phrases back-to-back when the rider is on the literal
+        // final turn into the destination. Approach phrases (>60 m to
+        // next turn) don't conflict.
+        if !announcedDestinationApproach500,
+           remainingMeters <= 500, remainingMeters > 100,
+           distanceToNextTurnMeters ?? .infinity > 60 {
             announcedDestinationApproach500 = true
             voiceGuide.announce(RideAnnouncements.destinationApproach(inMeters: remainingMeters))
-        } else if !announcedDestinationApproach100, remainingMeters <= 100 {
+        } else if !announcedDestinationApproach100,
+                  remainingMeters <= 100,
+                  distanceToNextTurnMeters ?? .infinity > 60 {
             announcedDestinationApproach100 = true
             voiceGuide.announce(RideAnnouncements.destinationApproach(inMeters: remainingMeters))
         }

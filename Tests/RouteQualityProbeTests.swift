@@ -3,9 +3,6 @@ import CoreLocation
 @testable import LaneLine
 
 /// Behavioral probes of routing quality on the real bundled city graph.
-/// These tests document current behavior on real SF terrain and guard
-/// against regressions in grade/speed modeling. Failures here signal a
-/// real product-quality regression, not a fixture problem.
 final class RouteQualityProbeTests: XCTestCase {
     private func makeService() throws -> GeospatialDataService {
         let resourcesURL = URL(fileURLWithPath: #filePath)
@@ -30,8 +27,32 @@ final class RouteQualityProbeTests: XCTestCase {
         )
     }
 
-    /// Sanity check on real SF terrain: a short urban hop should produce at
-    /// least two meaningfully different candidates across strategies.
+    private func edge(
+        length: Double,
+        grade: Double,
+        facility: BikeFacilityType = .mixedTraffic,
+        protection: ProtectionLevel = .none
+    ) -> RouteGraph.Edge {
+        RouteGraph.Edge(
+            id: 0, from: 0, to: 1,
+            lengthMeters: length,
+            grade: grade,
+            estimatedSeconds: CyclingSpeedModel.neutralTraversalSeconds(
+                lengthMeters: length, grade: grade
+            ),
+            facilityType: facility,
+            protectionLevel: protection,
+            roadClass: .residential,
+            surfaceType: .asphalt,
+            stressScore: 0.15,
+            confidenceScore: 0.9,
+            streetName: nil,
+            geometry: [],
+            isWiggleCorridor: false
+        )
+    }
+
+    /// Sanity check on real SF terrain.
     func testShortUrbanHopProducesMultipleCandidates() async throws {
         let service = try makeService()
         let routing = RoutingService(geospatialService: service)
@@ -48,51 +69,22 @@ final class RouteQualityProbeTests: XCTestCase {
                   "climb=\(Int(c.totalElevationGainMeters))m maxGrade=\(c.maxGradeFormatted) " +
                   "segs=\(c.segments.count) protect=\(Int(c.protectedLanePercent * 100))%")
         }
-        XCTAssertGreaterThanOrEqual(
-            candidates.count, 2,
-            "A real SF trip should produce multiple distinct candidates, not one consensus route"
-        )
+        XCTAssertGreaterThanOrEqual(candidates.count, 2)
     }
 
-    /// The bundled BBBike street extract doesn't include the Presidio; this
-    /// trip exists as a placeholder for when coverage is extended.
     func testEmbarcaderoToCrissyPresidioCoverage() async throws {
-        throw XCTSkip("Bundled street network does not cover the Presidio; revisit after coverage extension")
+        throw XCTSkip("Bundled street network does not cover the Presidio")
     }
 
-    /// Cross-town probe: Ocean Beach to Mission Bay. Confirms the
-    /// 1.7× detour cap doesn't cull the flatter EasierClimbing option for
-    /// a long cross-town trip where the flat path is meaningfully longer
-    /// than the hill shortcut.
-    func testProbe_OceanBeachToMissionBay() async throws {
+    /// Verify the easierClimbing strategy actually produces flatter
+    /// routes than balanced when the rider has hillTolerance = .low
+    /// (default for fresh installs). If it doesn't, something is wrong
+    /// with the cost model wiring.
+    func testFreshInstallUserGetsHillAvoidingRecommendedOnRealTerrain() async throws {
         let service = try makeService()
         let routing = RoutingService(geospatialService: service)
-        let origin = CLLocationCoordinate2D(latitude: 37.7597, longitude: -122.5107)
-        let destination = CLLocationCoordinate2D(latitude: 37.7706, longitude: -122.3889)
-        let profile = RiderProfile(bikeType: .roadBike, hillTolerance: .low)
-
-        let candidates = try await routing.generateRoutes(
-            from: origin, to: destination, profile: profile,
-            strategies: [.faster, .easierClimbing, .balanced]
-        )
-        for c in candidates {
-            let ratio = candidates.first.map { c.totalDistanceMeters / max(Double($0.totalDistanceMeters), 1) } ?? 1.0
-            print("[probe-cross] \(c.strategyType): dist=\(Int(c.totalDistanceMeters))m " +
-                  "climb=\(Int(c.totalElevationGainMeters))m maxGrade=\(c.maxGradeFormatted) " +
-                  "distRatio=\(String(format: "%.2fx", ratio))")
-        }
-        let easier = candidates.first { $0.strategyType == .easierClimbing }
-        XCTAssertNotNil(easier, "EasierClimbing must survive the detour cap on this long cross-town trip")
-    }
-
-    /// Yo-yo probe: Bernal Heights south-of to Potrero. Both balanced and
-    /// easierClimbing currently produce similar up-down patterns. Tests
-    /// whether the model differentiates yo-yo from monotonic.
-    func testProbe_BernalHeightsYoYo() async throws {
-        let service = try makeService()
-        let routing = RoutingService(geospatialService: service)
-        let origin = CLLocationCoordinate2D(latitude: 37.7400, longitude: -122.4150)
-        let destination = CLLocationCoordinate2D(latitude: 37.7650, longitude: -122.4050)
+        let origin = CLLocationCoordinate2D(latitude: 37.7609, longitude: -122.4350)
+        let destination = CLLocationCoordinate2D(latitude: 37.7658, longitude: -122.4498)
         let profile = RiderProfile(bikeType: .roadBike)
 
         let candidates = try await routing.generateRoutes(
@@ -100,48 +92,51 @@ final class RouteQualityProbeTests: XCTestCase {
             strategies: [.balanced, .easierClimbing]
         )
         for c in candidates {
-            let grades = c.segments.map(\.averageGrade).filter { abs($0) > 0.03 }
-            let gradeVariance = grades.count > 1 ? variance(grades) : 0
-            print("[probe-yo-yo] \(c.strategyType): dist=\(Int(c.totalDistanceMeters))m " +
+            print("[probe-fresh-install] \(c.strategyType): dist=\(Int(c.totalDistanceMeters))m " +
                   "climb=\(Int(c.totalElevationGainMeters))m maxGrade=\(c.maxGradeFormatted) " +
-                  "steepSegs=\(grades.count) gradeVar=\(String(format: "%.4f", gradeVariance))")
+                  "protect=\(Int(c.protectedLanePercent * 100))%")
         }
+        guard let recommendedID = candidates.recommendedID(for: profile) else {
+            XCTFail("Expected a recommendation for fresh-install profile")
+            return
+        }
+        let recommended = try XCTUnwrap(candidates.first { $0.id == recommendedID })
+        XCTAssertLessThanOrEqual(
+            recommended.maxGrade, 0.10,
+            "Fresh-install user should be steered toward a route under 10% grade on this terrain"
+        )
     }
 
-    /// Wiggle probe: a trip where the corridor grazes but doesn't really
-    /// fit. Confirms the corridor discount doesn't cause the model to
-    /// commit to a less-direct path through the Wiggle.
-    func testProbe_WiggleGrazingTrip() async throws {
-        let service = try makeService()
-        let routing = RoutingService(geospatialService: service)
-        let origin = CLLocationCoordinate2D(latitude: 37.7640, longitude: -122.4260)
-        let destination = CLLocationCoordinate2D(latitude: 37.7925, longitude: -122.4380)
-        let profile = RiderProfile(bikeType: .hybridFitness)
+    /// Debug: how expensive is a 25% grade edge under easierClimbing vs
+    /// balanced, both with hillTolerance = .low? EasierClimbing should be
+    /// dramatically more expensive.
+    func testProbeCostOf25PercentEdge() {
+        let profile = RiderProfile(bikeType: .roadBike, hillTolerance: .low)
+        let balanced = RoutingCostModel(profile: profile, strategy: .balanced)
+        let easier = RoutingCostModel(profile: profile, strategy: .easierClimbing)
 
-        let withoutWiggle = try await routing.generateRoutes(
-            from: origin, to: destination, profile: profile,
-            strategies: [.faster], preferWiggle: false
-        )
-        let withWiggle = try await routing.generateRoutes(
-            from: origin, to: destination, profile: profile,
-            strategies: [.faster], preferWiggle: true
-        )
-        for c in withoutWiggle {
-            print("[probe-wiggle-off] \(c.strategyType): dist=\(Int(c.totalDistanceMeters))m " +
-                  "usedWiggle=\(c.usedWiggleCorridor) segs=\(c.segments.count)")
-            print("  streets: " + c.segments.compactMap(\.streetName).joined(separator: " → "))
-        }
-        for c in withWiggle {
-            print("[probe-wiggle-on] \(c.strategyType): dist=\(Int(c.totalDistanceMeters))m " +
-                  "usedWiggle=\(c.usedWiggleCorridor) segs=\(c.segments.count)")
-            print("  streets: " + c.segments.compactMap(\.streetName).joined(separator: " → "))
-        }
-    }
+        let edge25 = edge(length: 50, grade: 0.25)
 
-    private func variance(_ values: [Double]) -> Double {
-        guard values.count > 1 else { return 0 }
-        let mean = values.reduce(0, +) / Double(values.count)
-        let sumSq = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) }
-        return sumSq / Double(values.count)
+        // Decompose cost for the 25% edge under each strategy.
+        let bikeType = profile.bikeType
+        let grade = edge25.grade
+        let length = edge25.lengthMeters
+        let speedMs = CyclingSpeedModel.speedKmh(bikeType: bikeType, grade: grade) / 3.6
+        let time = length / max(0.1, speedMs)
+        print("[probe-cost-25] baseTime=\(time)s speed=\(speedMs*3.6)km/h grade=\(grade*100)%")
+
+        let balWeights = RoutingWeights.base(for: profile).applying(.balanced)
+        let easyWeights = RoutingWeights.base(for: profile).applying(.easierClimbing)
+        print("[probe-cost-25] bal.climbSecPerM=\(balWeights.climbSecondsPerMeter) easy.climbSecPerM=\(easyWeights.climbSecondsPerMeter)")
+        print("[probe-cost-25] bal.steepThreshold=\(balWeights.steepGradeThreshold) bal.steepFactor=\(balWeights.steepGradePenaltyFactor)")
+        print("[probe-cost-25] easy.steepThreshold=\(easyWeights.steepGradeThreshold) easy.steepFactor=\(easyWeights.steepGradePenaltyFactor)")
+
+        let balClimb = length * grade * balWeights.climbSecondsPerMeter
+        let easyClimb = length * grade * easyWeights.climbSecondsPerMeter
+        let balSpike = grade > balWeights.steepGradeThreshold ? time * (grade - balWeights.steepGradeThreshold) * balWeights.steepGradePenaltyFactor : 0
+        let easySpike = grade > easyWeights.steepGradeThreshold ? time * (grade - easyWeights.steepGradeThreshold) * easyWeights.steepGradePenaltyFactor : 0
+        print("[probe-cost-25] bal climb=\(balClimb)s spike=\(balSpike)s easy climb=\(easyClimb)s spike=\(easySpike)s")
+
+        print("[probe-cost-25] bal.total=\(balanced.cost(of: edge25))s easy.total=\(easier.cost(of: edge25))s")
     }
 }

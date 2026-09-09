@@ -85,9 +85,18 @@ struct RoutingWeights {
             weights.bufferedFactor = 1
             weights.paintedFactor = 1
         case .easierClimbing:
+            // The strategy name promises *easier* climbs, not minimal
+            // total climb — a single 25% peak is worse for a rider than
+            // a 5% sustained climb of the same total meters, but the
+            // linear spike penalty (factor × (grade - threshold)) is
+            // dominated by the climb-per-meter term at extreme grades
+            // and can leave a steep peak as the *cheaper* option. Bumping
+            // the factor orders of magnitude makes the penalty behave
+            // closer to an L∞ "no grade above X" rule and forces A*
+            // around any block that exceeds the lower threshold.
             weights.climbSecondsPerMeter *= 2.5
             weights.steepGradeThreshold = max(0.04, weights.steepGradeThreshold - 0.02)
-            weights.steepGradePenaltyFactor *= 2
+            weights.steepGradePenaltyFactor = max(weights.steepGradePenaltyFactor, 150)
         }
         return weights
     }
