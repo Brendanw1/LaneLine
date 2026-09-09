@@ -31,7 +31,13 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         name: String = "",
         bikeType: BikeType = .roadBike,
-        hillTolerance: HillTolerance = .moderate,
+        // Default to "Avoid hills" per the product brief: the standard
+        // preference is hill-avoidance with a small time sacrifice, not
+        // a hill-neutral baseline. New riders see Recommended routes that
+        // favour flatter corridors on their first ride; existing riders
+        // keep whatever they saved (the `init(from:)` decoder never
+        // applies defaults), so this only affects fresh installs.
+        hillTolerance: HillTolerance = .low,
         safetyPreference: SafetyPreference = .moderate,
         directnessPreference: DirectnessPreference = .balanced,
         surfaceSensitivity: SurfaceSensitivity = .moderate,
