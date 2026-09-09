@@ -78,8 +78,7 @@ final class RouteQualityProbeTests: XCTestCase {
 
     /// Verify the easierClimbing strategy actually produces flatter
     /// routes than balanced when the rider has hillTolerance = .low
-    /// (default for fresh installs). If it doesn't, something is wrong
-    /// with the cost model wiring.
+    /// (default for fresh installs).
     func testFreshInstallUserGetsHillAvoidingRecommendedOnRealTerrain() async throws {
         let service = try makeService()
         let routing = RoutingService(geospatialService: service)
@@ -96,6 +95,17 @@ final class RouteQualityProbeTests: XCTestCase {
                   "climb=\(Int(c.totalElevationGainMeters))m maxGrade=\(c.maxGradeFormatted) " +
                   "protect=\(Int(c.protectedLanePercent * 100))%")
         }
+        // EasierClimbing should not be worse than Balanced on max grade
+        // for a hill-avoidant rider — the strategy name promises easier
+        // climbs, not the same or worse.
+        let balanced = try XCTUnwrap(candidates.first { $0.strategyType == .balanced })
+        let easier = try XCTUnwrap(candidates.first { $0.strategyType == .easierClimbing })
+        XCTAssertLessThanOrEqual(
+            easier.maxGrade, balanced.maxGrade,
+            "EasierClimbing must not produce a steeper max grade than Balanced for the same rider"
+        )
+        // And the recommended candidate (default fresh-install profile)
+        // should land on a route under 10% on this hill-crossing trip.
         guard let recommendedID = candidates.recommendedID(for: profile) else {
             XCTFail("Expected a recommendation for fresh-install profile")
             return

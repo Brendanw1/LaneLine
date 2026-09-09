@@ -278,11 +278,11 @@ RideScreenCustomization
 ## ROUTING LOGIC
 
 ### Routing Philosophy
-LaneLine should recommend the best overall ride for the rider and bike type, not merely the shortest valid route. The route engine should behave like a weighted, explainable graph optimizer with route alternatives generated from different preference profiles.
+LaneLine should recommend the best overall ride for the rider and bike type, not merely the shortest valid route. The route engine should behave like a weighted, explainable graph optimizer with route alternatives generated from different preference profiles, then a profile-aware pick from those alternatives — the "Recommended" badge is **not** a fixed strategy.
 
 ### Segment-Level Scoring
 Every route segment should contribute to the total route score using a weighted function based on:
-- travel time
+- travel time (driven by a piecewise speed model that differentiates 8% / 10% / 12% climbs instead of flat-flooring above 9%)
 - average and max grade
 - elevation gain
 - bike facility type
@@ -293,6 +293,9 @@ Every route segment should contribute to the total route score using a weighted 
 - turn complexity
 - rider bike type
 - rider route preferences
+- a hill-burden surcharge that scales past `steepGradeThreshold` (with a much stronger floor under the Easier Climbing strategy so a single steep block forces A* to detour around it)
+
+The descent model caps speed at 1.35× flat below −10% and tightens the cap as steepness grows past that threshold — riders brake hard on steep downhills rather than accelerating. The e-bike walking-pace floor reflects real e-bike physics (motor assist dies around 8–10%, then the rider's own legs take over).
 
 ### Example Weighting Behavior by Bike Type
 - **Road bike**: strong penalty for rough or unknown surface, strong penalty for steep spikes, stronger preference for protected lanes and calmer roads, moderate tolerance for slightly longer detours if ride quality improves.
@@ -306,7 +309,19 @@ Generate multiple route profiles rather than one path:
 3. Faster / direct
 4. Easier climbing
 
+The **Faster** strategy is pure travel time — `climbSecondsPerMeter` and the spike factor are zeroed — so a rider who picks Faster actually gets the shortest-time path even when it includes a steep climb. The **Easier Climbing** strategy floors the spike penalty factor at 150 so a single steep block dominates the local cost sum; previously this strategy could produce routes with HIGHER max grade than Balanced on real SF terrain because the linear spike penalty was overwhelmed by the climb-per-meter term.
+
 Then compute route-level summaries and explanations for each.
+
+### Recommendation Logic
+The "Recommended" badge on the comparison screen is computed by `RouteRecommendation` against the **full candidate set** — never hardcoded to Balanced. Each candidate is scored by a weighted mix of hill burden (0.65 × normalized max grade + 0.35 × normalized accumulated climb) and travel time (relative to the fastest option), with the blend driven by the rider's profile:
+
+- `hillTolerance: .low` (the default for new installs) — 70% hill, 30% time. The Recommended badge on Castro → Cole Valley lands on a 7.1% max-grade route instead of the direct 18% line.
+- `hillTolerance: .moderate` — 40% hill, 60% time.
+- `hillTolerance: .high` — 10% hill, 90% time. The Recommended badge picks the genuinely fastest option regardless of steepness.
+- `safetyPreference: .high` adds a small (+0.10) bonus to the hill weight (calmer streets usually have both flatter grades and better bike infra, so the two preferences reinforce each other).
+
+A 15% time-sacrifice cap protects against the "Avoid hills" preference silently pushing the user onto a route that's significantly longer — if the lowest-score candidate is more than 15% slower than the fastest, the recommender falls back to the fastest candidate.
 
 ### Explainability Requirements
 For each route recommendation, produce:
@@ -321,6 +336,11 @@ A route confidence score should drop when:
 - stress proxies are inferred instead of sourced
 - segment metadata is incomplete
 - route alternatives depend heavily on uncertain attributes
+
+### Active-Ride Flow
+- **Off-route detection**: the snap-to-route lookup uses a 75 m grid index (O(1) per tick instead of O(n) over the full polyline). Sustained off-route (>150 m from the route) for 10 s freezes progress and auto-reroutes from the rider's real position. The new route's progress is snapped to the nearest point on it; if the rider isn't within snap tolerance of the new route (e.g. canned test stubs), `isOffRoute` stays true so the next tick can re-evaluate.
+- **Voice guidance**: turn-by-turn approach (≤350 m) and imminent (≤60 m) prompts, plus 500 m / 100 m destination countdowns. A `lastAnnouncedTurnKey` ensures a queued phrase for turn N can't outlive the moment turn N+1 becomes current — it would otherwise play out describing a turn that's no longer next. The 500 m / 100 m destination phrases suppress themselves when an imminent-turn phrase just announced (within 60 m), to avoid queueing two phrases back-to-back on the literal final turn into the destination.
+- **Cache invalidation**: the on-disk routing graph is keyed by a SHA-256 fingerprint of the bundled source files (`SFStreetNetwork`, `MTA_Bike_Network_Linear_Features`, `Protected_Bike_Lanes`, `SFCityElevations`). A bundle update invalidates the cache automatically on next launch — previously a developer who edited `SFCityElevations.json` without bumping a version constant would ship a graph that silently used old data, which was the bug behind an early regression.
 
 ---
 

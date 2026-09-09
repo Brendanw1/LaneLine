@@ -48,15 +48,18 @@ Xcode, and hit Run. First install only:
 3. Voice guidance speaks over your music (it ducks, then restores); the
    ride screen keeps the display awake while navigating.
 
-Routing works city-wide immediately — the full SF street network and bikeway
-data are bundled in `Resources/` (a filtered OpenStreetMap extract plus SFMTA
-CSVs, see `NOTICE.md` for provenance), built into a graph on first launch
-(~8s one-time cost, then disk-cached). Elevation for anything outside the
-bundled bikeway network is nil (flat-grade assumption) until you run
-*Settings → Fetch live SF bike network*, which re-ingests from live
-DataSF/OSM sources with full elevation lookups (batched 100/request,
-disk-cached) — a city-wide build takes minutes the first time and is instant
-after.
+Routing works city-wide immediately — the full SF street network, bikeway
+data, and elevation cache are bundled in `Resources/` (a filtered
+OpenStreetMap extract plus SFMTA CSVs plus the Copernicus GLO-90 DEM
+coverage, see `NOTICE.md` for provenance), built into a graph on first
+launch (~8s one-time cost, then disk-cached). Stale on-disk caches are
+detected automatically by a SHA-256 fingerprint over the bundled sources
+— if the elevation or street bundle changes, the next launch rebuilds
+the graph without bumping a version constant. *Settings → Fetch live SF
+bike network* is the optional path that re-ingests from live
+DataSF/OSM sources for freshest data; full city-wide elevation is
+already present in the bundled cache, so the default path is no longer
+flat-grade.
 
 ### Apple Music on device
 
@@ -82,7 +85,8 @@ Models/         Domain types: RiderProfile, RouteCandidate, RouteSegment, DTOs�
 Services/
   GeospatialData/   Local bundled sources (default) + live DataSF/Overpass/USGS
                     clients, graph builder, sample loader
-  Routing/          RouteGraph, A* planner, cost model, metrics, explanations
+  Routing/          RouteGraph, A* planner, cost model, metrics, explanations,
+                    profile-aware recommendation
   AppleMusic/       MusicKit service (auth, subscription, playback, queue,
                     shuffle/repeat, playlists) + LRCLIB lyrics client
   Location/         CLLocationManager wrapper + mock
@@ -99,7 +103,7 @@ Resources/      Bundled SF street network + bikeway CSVs + elevation cache
                 (see NOTICE.md for data provenance/licensing),
                 SFSampleNetwork.json (fallback demo network)
 Scripts/        generate_sample_network.py (provenance for the sample data)
-Tests/          XCTest suite (76 tests)
+Tests/          XCTest suite (122 tests)
 ```
 
 Services are protocol-typed and injected through `ServiceContainer` in the
@@ -144,12 +148,28 @@ cost = time × facilityFactor × (1 + stressWeight × stress) × surfaceFactor
      + confidence hedge
 ```
 
+The climb / descent cost terms were reworked around a piecewise speed model
+(`CyclingSpeedModel`) so 8% / 10% / 12% climbs produce meaningfully
+different times (5.6 / 4.4 / 3.4 km/h on a road bike) instead of collapsing
+to the previous flat 5 km/h floor; descent caution scales past the −8%
+threshold instead of being a flat surcharge; and the e-bike walking-pace
+floor reflects real e-bike physics (motor assist dies around 8–10%, then
+the rider's own legs take over). The piecewise `climbSecondsPerMeter` and
+strategy multipliers were rebalanced against the corrected speed model so
+the climb burden isn't double-counted.
+
 Weights resolve from bike type (road / hybrid / gravel / city / e-bike),
 rider preferences (hill tolerance, safety, surface sensitivity), and strategy
-(Recommended / Safer / Faster / Easier climbing). Road bikes strongly penalize
-rough or unknown surfaces and grade spikes; e-bikes barely notice climbs.
-Traffic stress follows an LTS-style model from road class, protection level,
-posted speed, and lane count.
+(Recommended / Safer / Faster / Easier climbing). The **Faster** strategy is
+pure travel time — `climbSecondsPerMeter` and the spike factor are zeroed —
+so a rider who picks Faster actually gets the shortest-time path even when
+it includes a steep climb. The **Easier Climbing** strategy floors the spike
+penalty factor at 150 so a single steep block dominates the local cost sum
+and A* detours around it (a 25% peak on Castro → Cole Valley used to win
+the easierClimbing strategy against Balanced's 7.1% peak; it doesn't any
+more). Road bikes strongly penalize rough or unknown surfaces and grade
+spikes; e-bikes barely notice climbs. Traffic stress follows an LTS-style
+model from road class, protection level, posted speed, and lane count.
 
 Candidates are deduplicated by edge overlap (Jaccard ≥ 0.9), capped at 1.7×
 the shortest option, and limited to three. When every strategy converges on
@@ -158,6 +178,30 @@ remaining strategies (penalty method) so riders still get a real alternative.
 Every candidate carries a score breakdown, a plain-language recommendation,
 and caution notes; the detail screen explains the hardest segment and how
 preference changes would alter the pick.
+
+### Recommendation logic
+
+The "Recommended" badge on the comparison screen is computed against the
+**full candidate set**, not hardcoded to the Balanced strategy. A
+profile-aware blend (`RouteRecommendation`) scores each candidate by a
+weighted mix of hill burden (max grade + accumulated climb) and travel
+time, then picks the lowest score subject to a 15% time-sacrifice cap
+(the "few minutes" the rider is willing to trade for a less-steep
+alternative). Default weight blends:
+
+- `hillTolerance: .low` (the default for new installs) — 70% hill, 30%
+  time. The Recommended badge on Castro → Cole Valley lands on a 7.1%
+  max-grade route instead of the direct 18% line.
+- `hillTolerance: .moderate` — 40% hill, 60% time.
+- `hillTolerance: .high` — 10% hill, 90% time. The Recommended badge
+  picks the genuinely fastest option regardless of steepness.
+- `safetyPreference: .high` adds a small bonus to the hill weight
+  (calmer streets usually have both flatter grades and better bike
+  infra, so the two preferences reinforce each other).
+
+If the lowest-score candidate is more than 15% slower than the fastest,
+the recommender falls back to the fastest candidate so an Avoid-hills
+rider is never silently pushed onto a route that's significantly longer.
 
 ### Apple Music
 
@@ -185,8 +229,8 @@ Dynamic-Island-styled banner, so navigation guidance is never fully hidden.
 | MusicKit integration | Real; `MockMusicService` exists for previews only |
 | Lyrics | Real HTTP client against LRCLIB; best-effort, not every track matches |
 | Location | Real `CLLocationManager`; `MockLocationService` (Valencia & 16th) for previews/simulator |
-| Ride progress during navigation | Live GPS when on-route; sustained off-route drift freezes progress and auto-reroutes from the rider's real position; simulation only when there is no fix at all (simulator/demo) |
-| Voice guidance | Real `AVSpeechSynthesizer` turn-by-turn prompts that duck music during announcements; mute toggle is functional |
+| Ride progress during navigation | Live GPS when on-route; sustained off-route drift freezes progress and auto-reroutes from the rider's real position (snapped to the new route, not reset to its start); simulation only when there is no fix at all (simulator/demo) |
+| Voice guidance | Real `AVSpeechSynthesizer` turn-by-turn prompts that duck music during announcements, plus 500 m / 100 m destination countdowns; mute toggle is functional |
 | Persistence | Real UserDefaults-backed store |
 | Ride statistics (speed, elevation, calories) | Real: GPS + barometer through `RideAggregator`; physics-based calorie model; demo mode feeds the same pipeline from the simulated position |
 | Ride recording | Real file-backed `RideStore` (JSON per ride + summaries index in Application Support), 60 s crash checkpoints |
