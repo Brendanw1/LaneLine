@@ -132,8 +132,12 @@ struct RideAggregator {
         }
 
         // Grade over the trailing window: keep the most recent point that is
-        // still a full window behind as the slope base.
-        gradeTrail.append((totals.distanceMeters, altitude))
+        // still a full window behind as the slope base. Skip stationary
+        // ticks so a long stop can't grow the trail without bound or let
+        // barometer drift masquerade as grade.
+        if totals.distanceMeters - (gradeTrail.last?.distance ?? -.infinity) >= 1 {
+            gradeTrail.append((totals.distanceMeters, altitude))
+        }
         while gradeTrail.count >= 2,
               totals.distanceMeters - gradeTrail[1].distance >= config.gradeWindowMeters {
             gradeTrail.removeFirst()

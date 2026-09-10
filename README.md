@@ -229,7 +229,7 @@ Dynamic-Island-styled banner, so navigation guidance is never fully hidden.
 | MusicKit integration | Real; `MockMusicService` exists for previews only |
 | Lyrics | Real HTTP client against LRCLIB; best-effort, not every track matches |
 | Location | Real `CLLocationManager`; `MockLocationService` (Valencia & 16th) for previews/simulator |
-| Ride progress during navigation | Live GPS when on-route; sustained off-route drift freezes progress and auto-reroutes from the rider's real position (snapped to the new route, not reset to its start); simulation only when there is no fix at all (simulator/demo) |
+| Ride progress during navigation | Live GPS when on-route; sustained off-route drift freezes progress and auto-reroutes from the rider's real position (snapped to the new route, not reset to its start); a failed reroute shows a "Couldn't reroute" chip instead of going silent; simulation only when there is no fix at all (simulator/demo) — with location denied or GPS lost on a real device, progress freezes under a "No GPS" chip and recording leaves gaps rather than inventing movement |
 | Voice guidance | Real `AVSpeechSynthesizer` turn-by-turn prompts that duck music during announcements, plus 500 m / 100 m destination countdowns; mute toggle is functional |
 | Persistence | Real UserDefaults-backed store |
 | Ride statistics (speed, elevation, calories) | Real: GPS + barometer through `RideAggregator`; physics-based calorie model; demo mode feeds the same pipeline from the simulated position |

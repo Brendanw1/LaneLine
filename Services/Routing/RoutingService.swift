@@ -77,6 +77,7 @@ actor RoutingService: RoutingServiceProtocol {
                 <= maxSnapDistanceMeters else {
             throw RoutingError.destinationOffNetwork
         }
+        guard start.id != goal.id else { throw RoutingError.alreadyThere }
 
         var paths: [(strategy: RouteStrategyType, edges: [RouteGraph.Edge])] = []
         for strategy in strategies {

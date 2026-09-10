@@ -335,11 +335,17 @@ struct ActiveNavigationView: View {
 
     private func statusRow(_ ride: ActiveRideModel) -> some View {
         HStack(spacing: LaneLineDesign.Spacing.small) {
+            if ride.isLocationUnavailable {
+                statusChip(text: "No GPS", icon: "location.slash.fill", tint: LaneLineDesign.Colors.danger)
+            }
             if ride.isOffRoute {
                 statusChip(text: "Off route", icon: "location.slash", tint: LaneLineDesign.Colors.warning)
             }
             if ride.isRerouting {
                 statusChip(text: "Rerouting…", icon: "arrow.triangle.2.circlepath", tint: LaneLineDesign.Colors.primary)
+            }
+            if ride.rerouteFailed, !ride.isRerouting {
+                statusChip(text: "Couldn't reroute", icon: "exclamationmark.triangle", tint: LaneLineDesign.Colors.warning)
             }
             if ride.isPaused {
                 statusChip(text: "Paused", icon: "pause.fill", tint: LaneLineDesign.Colors.warning)

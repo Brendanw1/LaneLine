@@ -73,6 +73,10 @@ final class HealthKitService: HealthKitServicing {
     func saveWorkout(_ record: RideRecord) async {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         refreshAuthorizationState()
+        if authorizationState == .denied {
+            lastErrorMessage = "Log rides to Health is on, but access was denied — rides aren't being logged."
+            return
+        }
         guard authorizationState == .authorized else { return }
 
         let summary = record.summary
@@ -91,10 +95,15 @@ final class HealthKitService: HealthKitServicing {
 
         do {
             try await store.save(workout)
-            try await saveRoute(for: record, workout: workout)
             lastErrorMessage = nil
         } catch {
             lastErrorMessage = "Couldn't save the ride to Health."
+            return
+        }
+        do {
+            try await saveRoute(for: record, workout: workout)
+        } catch {
+            lastErrorMessage = "Ride saved to Health, but its route map didn't attach."
         }
     }
 
@@ -126,14 +135,15 @@ final class HealthKitService: HealthKitServicing {
             }
         }
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            routeBuilder.finishRoute(with: workout, metadata: nil) { _, error in
+            routeBuilder.finishRoute(with: workout, metadata: nil) { route, error in
                 if let error { continuation.resume(throwing: error) }
+                else if route == nil { continuation.resume(throwing: HealthKitError.routeFinishFailed) }
                 else { continuation.resume() }
             }
         }
     }
 
-    private enum HealthKitError: Error { case routeInsertFailed }
+    private enum HealthKitError: Error { case routeInsertFailed, routeFinishFailed }
 }
 
 // MARK: - Preview / Simulator Mock

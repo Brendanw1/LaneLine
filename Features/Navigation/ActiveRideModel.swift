@@ -19,6 +19,12 @@ final class ActiveRideModel {
     private(set) var isPaused = false
     private(set) var isRerouting = false
     private(set) var isOffRoute = false
+    private(set) var rerouteFailed = false
+    /// True while there is no usable position: permission denied/revoked,
+    /// or authorized but still waiting on (or lost) the fix on a real
+    /// device. Progress freezes and the ride screen must say so instead
+    /// of simulating movement.
+    private(set) var isLocationUnavailable = false
     var guidanceMuted = false {
         didSet {
             voiceGuide?.isMuted = guidanceMuted
@@ -355,19 +361,26 @@ final class ActiveRideModel {
 
     /// Re-plan to the route's destination using the same strategy, from the
     /// rider's real position when there is a fix (they may have left the
-    /// line), otherwise from the route position.
+    /// line), otherwise from the route position. Sets `rerouteFailed` when
+    /// planning throws or returns nothing, so the ride screen can say so
+    /// instead of dropping back to silence.
     func reroute() async {
         guard let destination = route.allCoordinates.last, !isRerouting else { return }
         isRerouting = true
         defer { isRerouting = false }
 
         let origin = locationService.currentLocation?.coordinate ?? currentCoordinate
-        if let fresh = try? await routingService.generateRoutes(
-            from: origin,
-            to: destination,
-            profile: profile,
-            strategies: [route.strategyType]
-        ).first {
+        do {
+            guard let fresh = try await routingService.generateRoutes(
+                from: origin,
+                to: destination,
+                profile: profile,
+                strategies: [route.strategyType]
+            ).first else {
+                rerouteFailed = true
+                return
+            }
+            rerouteFailed = false
             // `AVSpeechSynthesizer.speak()` queues rather than interrupts, so
             // an "approach"/"imminent" announcement generated from the *old*
             // route can still be sitting queued here — if left alone, it
@@ -400,6 +413,8 @@ final class ActiveRideModel {
             }
             resetAnnouncements()
             voiceGuide?.announce(RideAnnouncements.rerouted)
+        } catch {
+            rerouteFailed = true
         }
     }
 
@@ -411,7 +426,8 @@ final class ActiveRideModel {
         guard !isPaused, !isComplete else { return }
         elapsedSeconds += deltaSeconds
 
-        if let location = locationService.currentLocation {
+        if locationService.isAuthorized, let location = locationService.currentLocation {
+            isLocationUnavailable = false
             // A real fix exists. snapToRoute returns nil when no route
             // vertex falls within the grid's walk window — i.e., the
             // rider is too far from the route to be considered on it,
@@ -421,6 +437,7 @@ final class ActiveRideModel {
             if let snapped = snapToRoute(location.coordinate) {
                 if snapped.distanceFromRoute <= liveTrackingToleranceMeters {
                     isOffRoute = false
+                    rerouteFailed = false
                     offRouteSeconds = 0
                     // Never move backwards on GPS jitter.
                     progressMeters = max(progressMeters, snapped.progress)
@@ -452,11 +469,17 @@ final class ActiveRideModel {
                     Task { await reroute() }
                 }
             }
-        } else {
-            // No fix at all (simulator, demo): advance along the geometry at
-            // bike-appropriate speeds so the screen is fully exercisable.
+        } else if locationService.allowsSimulation {
+            // No fix at all in a simulated source (simulator, demo):
+            // advance along the geometry at bike-appropriate speeds so
+            // the screen is fully exercisable.
+            isLocationUnavailable = false
             let speedMs = CyclingSpeedModel.speedKmh(bikeType: bikeType, grade: currentGrade) / 3.6
             progressMeters = min(totalMeters, progressMeters + speedMs * deltaSeconds)
+        } else {
+            // Real device, no usable position: freeze progress and say
+            // so. Never fabricate movement here.
+            isLocationUnavailable = true
         }
 
         refreshOrientation(deltaSeconds: deltaSeconds)

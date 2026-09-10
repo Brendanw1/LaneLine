@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// First-run flow: who's riding, what they ride, how they want to be routed,
 /// and whether Apple Music joins the ride screen. Writes a complete
@@ -260,6 +261,18 @@ private struct AppleMusicStep: View {
                     }
                 } label: {
                     Label("Connect Apple Music", systemImage: "link")
+                        .frame(maxWidth: .infinity)
+                        .frame(height: LaneLineDesign.HitTarget.minimum)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal, LaneLineDesign.Spacing.xlarge)
+            } else if music.connectionState == .denied || music.connectionState == .restricted {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Open Settings", systemImage: "gear")
                         .frame(maxWidth: .infinity)
                         .frame(height: LaneLineDesign.HitTarget.minimum)
                 }

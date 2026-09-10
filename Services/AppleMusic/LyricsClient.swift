@@ -92,9 +92,16 @@ struct LRCLibLyricsClient: LyricsProviding {
 /// Lyrics are supplementary display, not routing-critical, so unlike the
 /// elevation cache there's no need for disk persistence — re-fetching once
 /// per app launch is fine.
+///
+/// The cache memoizes *both* hits and misses: LRCLIB has no record for a
+/// large share of catalog tracks, and without memoizing misses every
+/// track change would re-issue the same 404. We store `nil` results
+/// separately from `SongLyrics?` returns to distinguish "cached miss"
+/// from "uncached".
 actor CachingLyricsProvider: LyricsProviding {
     private let upstream: any LyricsProviding
-    private var cache: [String: SongLyrics] = [:]
+    private var hits: [String: SongLyrics] = [:]
+    private var misses: Set<String> = []
 
     init(upstream: any LyricsProviding = LRCLibLyricsClient()) {
         self.upstream = upstream
@@ -104,11 +111,15 @@ actor CachingLyricsProvider: LyricsProviding {
         title: String, artist: String, album: String?, durationSeconds: Double?
     ) async throws -> SongLyrics? {
         let key = "\(artist.lowercased())|\(title.lowercased())"
-        if let cached = cache[key] { return cached }
+        if let cached = hits[key] { return cached }
+        if misses.contains(key) { return nil }
         guard let result = try await upstream.lyrics(
             title: title, artist: artist, album: album, durationSeconds: durationSeconds
-        ) else { return nil }
-        cache[key] = result
+        ) else {
+            misses.insert(key)
+            return nil
+        }
+        hits[key] = result
         return result
     }
 }

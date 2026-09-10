@@ -106,7 +106,12 @@ struct RootView: View {
                     catch { appModel.failedRideSave = record }
                 }
             }
-            Button("Discard", role: .cancel) { appModel.failedRideSave = nil }
+            Button("Discard", role: .cancel) {
+                if let record = appModel.failedRideSave {
+                    Task { await services.rideStore.delete(id: record.id) }
+                }
+                appModel.failedRideSave = nil
+            }
         } message: {
             Text("The ride couldn't be written to storage. It is still in memory — try again, or discard it.")
         }

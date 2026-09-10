@@ -45,7 +45,7 @@ struct RideCustomizationView: View {
             } header: {
                 Text("Music")
             } footer: {
-                Text("When on, the ride starts with the full player sheet open at half height.")
+                Text("When on, the ride starts with the full player sheet open.")
             }
         }
         .navigationTitle("Ride screen")

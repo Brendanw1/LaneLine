@@ -7,6 +7,7 @@ struct RideHistoryView: View {
 
     @State private var summaries: [RideSummary] = []
     @State private var selectedRecord: RideRecord?
+    @State private var recordLoadFailed = false
 
     var body: some View {
         NavigationStack {
@@ -22,7 +23,11 @@ struct RideHistoryView: View {
                         ForEach(summaries) { summary in
                             Button {
                                 Task {
-                                    selectedRecord = await services.rideStore.loadRecord(id: summary.id)
+                                    if let record = await services.rideStore.loadRecord(id: summary.id) {
+                                        selectedRecord = record
+                                    } else {
+                                        recordLoadFailed = true
+                                    }
                                 }
                             } label: {
                                 row(summary)
@@ -35,6 +40,9 @@ struct RideHistoryView: View {
                                 for summary in doomed {
                                     await services.rideStore.delete(id: summary.id)
                                 }
+                                // Reconcile with disk truth: a delete that
+                                // silently failed must reappear, not vanish.
+                                summaries = await services.rideStore.loadSummaries()
                             }
                         }
                     }
@@ -45,6 +53,11 @@ struct RideHistoryView: View {
             .refreshable { await reload() }
             .sheet(item: $selectedRecord) { record in
                 RideSummaryView(record: record)
+            }
+            .alert("Couldn't open that ride", isPresented: $recordLoadFailed) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Its file is missing or damaged.")
             }
         }
     }

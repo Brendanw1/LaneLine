@@ -37,7 +37,11 @@ enum CyclingSpeedModel {
                 // tuned so realistic SF grades (10–15%) land in the
                 // grinding-lowest-gear band (3–5 km/h) rather than collapsing
                 // to the floor at 10% as the previous linear model did.
-                let steepSlope = bikeType == .eBike ? 0.025 : 0.030
+                // E-bikes degrade faster here than below 8%: the motor's
+                // assist fades on truly steep pitches and the rider's legs
+                // take over, so the curve bends toward acoustic pace while
+                // staying above it (see testEBikeRetainsMoreSpeedThanRoadBikeAtSteepGrades).
+                let steepSlope = bikeType == .eBike ? 0.05 : 0.030
                 let steepBase = 1 - 8 * climbCostPerPercent
                 factor = max(walkingFactor(for: bikeType), steepBase - (climbPct - 8) * steepSlope)
             }

@@ -46,6 +46,11 @@ final class DestinationSearchModel {
         )
         completerProxy.onUpdate = { [weak self] results in
             self?.completions = results
+            self?.errorMessage = nil
+        }
+        completerProxy.onFailure = { [weak self] in
+            self?.completions = []
+            self?.errorMessage = "Search isn't available right now. Check your connection and try again."
         }
     }
 
@@ -70,6 +75,7 @@ final class DestinationSearchModel {
     private final class CompleterProxy: NSObject, MKLocalSearchCompleterDelegate {
         let completer = MKLocalSearchCompleter()
         var onUpdate: (([MKLocalSearchCompletion]) -> Void)?
+        var onFailure: (() -> Void)?
 
         override init() {
             super.init()
@@ -82,7 +88,7 @@ final class DestinationSearchModel {
         }
 
         func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
-            Task { @MainActor [weak self] in self?.onUpdate?([]) }
+            Task { @MainActor [weak self] in self?.onFailure?() }
         }
     }
 }
@@ -184,6 +190,10 @@ struct DestinationSearchView: View {
         Section {
             if let message = model.errorMessage {
                 Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+            } else if model.completions.isEmpty {
+                Text("No places match that search.")
                     .font(.subheadline)
                     .foregroundStyle(LaneLineDesign.Colors.textSecondary)
             }

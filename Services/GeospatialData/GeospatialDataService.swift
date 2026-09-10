@@ -5,6 +5,8 @@ import CryptoKit
 /// rider can see whether routing runs on live city data or the bundled sample.
 enum NetworkSource: Equatable {
     case liveIngestion(Date)
+    case liveBikewaysOnly(Date)
+    case bundledCity(Date)
     case diskCache(Date)
     case bundledSample
 
@@ -12,6 +14,10 @@ enum NetworkSource: Equatable {
         switch self {
         case .liveIngestion(let date):
             return "Live SF data (fetched \(date.formatted(date: .abbreviated, time: .shortened)))"
+        case .liveBikewaysOnly(let date):
+            return "Live bikeways only (streets unavailable \(date.formatted(date: .abbreviated, time: .shortened)))"
+        case .bundledCity(let date):
+            return "Bundled SF data (built \(date.formatted(date: .abbreviated, time: .shortened)))"
         case .diskCache(let date):
             return "Cached SF data (\(date.formatted(date: .abbreviated, time: .shortened)))"
         case .bundledSample:
@@ -120,17 +126,17 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
         // bike network" first. Both providers default to local/bundled data
         // now, so this doesn't touch the network for streets/bikeways.
         //
-        // Elevation is deliberately cache-only here: the full city needs
-        // ~395k node elevations and only ~22k (the rider's known commute
-        // corridor) are pre-baked into the bundle. Live-fetching the rest
-        // synchronously on first launch would mean hours of Open-Meteo
-        // calls before a single route could be planned — exactly the stall
-        // this whole local-data effort was meant to eliminate. Uncached
-        // nodes just get nil elevation (flat-grade assumption) until an
-        // explicit "Fetch live SF bike network" does a full live fetch.
+        // Elevation is deliberately cache-only here: live-fetching every
+        // uncached node synchronously on first launch would stall routing
+        // behind thousands of elevation calls — exactly the stall this
+        // whole local-data effort was meant to eliminate. The bundled
+        // cache carries city-wide coverage, so uncached nodes are the
+        // exception, not the rule; they get nil elevation (flat-grade
+        // assumption) until an explicit "Fetch live SF bike network"
+        // does a full live fetch.
         if let built = try? await buildFromBundledSources() {
             graph = built
-            source = .liveIngestion(.now)
+            source = .bundledCity(.now)
             persistGraph(built)
             return built
         }
@@ -166,8 +172,12 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
 
         let bikeways = try await bikewaysTask
         let rawEdges: [RawNetworkEdge]
+        /// True when the street fetch failed and routing falls back to
+        /// bikeways alone — the source label must say so.
+        let streetsUnavailable: Bool
         do {
             rawEdges = builder.rawEdges(from: try await streetsTask, enrichedBy: bikeways)
+            streetsUnavailable = false
         } catch {
             // OSM/Overpass is a free public service with no uptime
             // guarantee, and it can be unreachable for stretches at a time.
@@ -178,6 +188,7 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
             let bikewaysOnly = builder.rawEdges(fromBikewaysOnly: bikeways)
             guard !bikewaysOnly.isEmpty else { throw error }
             rawEdges = bikewaysOnly
+            streetsUnavailable = true
         }
         guard !rawEdges.isEmpty else { throw GeospatialDataError.emptyNetwork }
 
@@ -189,7 +200,7 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
         guard !built.isEmpty else { throw GeospatialDataError.emptyNetwork }
 
         graph = built
-        source = .liveIngestion(.now)
+        source = streetsUnavailable ? .liveBikewaysOnly(.now) : .liveIngestion(.now)
         persistGraph(built)
         return built
     }
@@ -228,6 +239,11 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
     private func bundledSourceFingerprint() -> String? {
         if let cached = cachedBundleFingerprint { return cached }
         var hasher = SHA256()
+        // Schema version for everything the file hashes can't see: the
+        // builder, cost model, stress model, and scoring logic that shape
+        // the graph just as much as the data does. Bump this whenever one
+        // of those changes, or devices keep serving a pre-fix graph.
+        hasher.update(data: Data(Self.graphSchemaVersion.utf8))
         var contributed = false
         for resource in Self.bundledSourceNames {
             guard let url = Bundle.main.url(forResource: resource, withExtension: nil) else { continue }
@@ -259,4 +275,10 @@ actor GeospatialDataService: GeospatialDataServiceProtocol {
         "Protected_Bike_Lanes",
         "SFCityElevations",
     ]
+
+    /// Version of the graph-building logic itself (builder, cost model,
+    /// stress model). Mixed into the cache fingerprint because file hashes
+    /// can't see code: bump on any logic change that would alter the
+    /// built graph, or devices keep serving the pre-change cache.
+    private static let graphSchemaVersion = "3"
 }

@@ -15,11 +15,20 @@ protocol LocationServicing: AnyObject, Observable {
     var currentHeadingAccuracy: Double? { get }
     var authorizationStatus: CLAuthorizationStatus { get }
     var isAuthorized: Bool { get }
+    /// True only for simulated location sources (previews, demo mode).
+    /// Gates the route-position simulation fallback: on a real device with
+    /// no fix, the ride must freeze and say so — never fabricate progress
+    /// or record invented samples.
+    var allowsSimulation: Bool { get }
 
     func requestAuthorization()
     func startUpdating()
     func stopUpdating()
     func reverseGeocodeStreetName(at coordinate: CLLocationCoordinate2D) async -> String?
+}
+
+extension LocationServicing {
+    var allowsSimulation: Bool { false }
 }
 
 // MARK: - Live CoreLocation Implementation
@@ -69,10 +78,12 @@ final class LocationService: LocationServicing {
     }
 
     func startUpdating() {
+        // Ride guidance keeps running with the phone mounted and locked.
+        // Flag first: the background mode only takes effect reliably when
+        // set before updates start.
+        manager.allowsBackgroundLocationUpdates = isAuthorized
         manager.startUpdatingLocation()
         manager.startUpdatingHeading()
-        // Ride guidance keeps running with the phone mounted and locked.
-        manager.allowsBackgroundLocationUpdates = isAuthorized
         manager.pausesLocationUpdatesAutomatically = false
     }
 
@@ -127,6 +138,8 @@ final class MockLocationService: LocationServicing {
     private(set) var authorizationStatus: CLAuthorizationStatus = .authorizedWhenInUse
 
     var isAuthorized: Bool { authorizationStatus == .authorizedWhenInUse }
+
+    var allowsSimulation: Bool { true }
 
     /// Pass `nil` for a fix-less mock: ride progress then falls back to the
     /// simulation engine, which is what demo mode wants.

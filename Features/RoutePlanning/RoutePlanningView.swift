@@ -29,6 +29,10 @@ final class RoutePlanningModel {
     /// the heart of the sample network.
     static let fallbackOrigin = CLLocationCoordinate2D(latitude: 37.76490, longitude: -122.42190)
     private(set) var origin: CLLocationCoordinate2D = RoutePlanningModel.fallbackOrigin
+    /// True when the last plan started from the fallback point because no
+    /// GPS fix was available — surfaced in the UI so the rider knows the
+    /// "Start" marker isn't their position.
+    private(set) var originIsFallback = false
 
     func plan(
         to destination: SelectedDestination,
@@ -37,6 +41,7 @@ final class RoutePlanningModel {
         routing: any RoutingServiceProtocol
     ) async {
         self.destination = destination
+        originIsFallback = location.currentLocation == nil
         origin = location.currentLocation?.coordinate ?? Self.fallbackOrigin
         phase = .planning
 
@@ -61,6 +66,7 @@ final class RoutePlanningModel {
         destination = nil
         candidates = []
         showComparison = false
+        originIsFallback = false
     }
 }
 
@@ -145,10 +151,33 @@ struct RoutePlanningView: View {
             searchBar
             wiggleToggle
 
+            if services.locationService.authorizationStatus == .denied
+                || services.locationService.authorizationStatus == .restricted {
+                HStack(spacing: LaneLineDesign.Spacing.small) {
+                    Image(systemName: "location.slash.fill")
+                        .foregroundStyle(LaneLineDesign.Colors.warning)
+                    Text("Location is off — routes start from 16th & Valencia.")
+                        .font(.subheadline)
+                        .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+                }
+                .padding(LaneLineDesign.Spacing.medium)
+                .background(LaneLineDesign.Colors.surface)
+                .clipShape(RoundedRectangle(cornerRadius: LaneLineDesign.CornerRadius.medium))
+                .shadow(color: .black.opacity(0.1), radius: 8, y: 2)
+            }
+
             if case .planning = model.phase {
                 planningBanner
             } else if case .failed(let message) = model.phase {
                 errorBanner(message)
+            } else if model.originIsFallback, model.destination != nil {
+                HStack(spacing: LaneLineDesign.Spacing.small) {
+                    Image(systemName: "location.slash")
+                        .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                    Text("No GPS fix — started from 16th & Valencia.")
+                        .font(.subheadline)
+                        .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                }
             }
 
             Spacer()
@@ -234,6 +263,29 @@ struct RoutePlanningView: View {
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+            Spacer()
+            if model.destination != nil {
+                Button("Retry") {
+                    guard let destination = model.destination else { return }
+                    Task {
+                        await model.plan(
+                            to: destination,
+                            profile: appModel.riderProfile,
+                            location: services.locationService,
+                            routing: services.routingService
+                        )
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LaneLineDesign.Colors.primary)
+            }
+            Button {
+                model.reset()
+            } label: {
+                Image(systemName: "xmark")
+                    .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+            }
+            .accessibilityLabel("Dismiss error")
         }
         .padding(LaneLineDesign.Spacing.medium)
         .background(LaneLineDesign.Colors.surface)

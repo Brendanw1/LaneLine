@@ -41,6 +41,7 @@ enum RoutingError: Error, LocalizedError {
     case originOffNetwork
     case destinationOffNetwork
     case noPathFound
+    case alreadyThere
 
     var errorDescription: String? {
         switch self {
@@ -50,6 +51,8 @@ enum RoutingError: Error, LocalizedError {
             return "That destination is outside the routable network."
         case .noPathFound:
             return "No rideable route connects these points yet."
+        case .alreadyThere:
+            return "You're already there — pick a destination farther away to plan a ride."
         }
     }
 }

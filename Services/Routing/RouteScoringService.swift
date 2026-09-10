@@ -130,8 +130,11 @@ struct RouteScoringService: RouteScoringServiceProtocol {
         // Detour penalty: how much longer vs direct
         let detourPenalty = max(0, (directnessRatio - 1.0)) * 1.5
 
-        // Descent penalty
-        let descentSegments = segments.filter { $0.averageGrade < -0.03 }
+        // Descent penalty, aligned with the cost model's caution
+        // threshold: only descents steep enough to demand braking show
+        // up as a penalty in the ledger. Gentle downhills are free
+        // speed, not a demerit.
+        let descentSegments = segments.filter { $0.averageGrade < -0.08 }
         let descentPenalty = Double(descentSegments.count) * 0.1
 
         return RouteScoreBreakdown(

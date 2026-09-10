@@ -108,11 +108,18 @@ final class RideRecorder {
     }
 
     /// Stops recording and returns the finished record. Idempotent.
+    /// Persists an incomplete final checkpoint so a crash before Save
+    /// loses nothing; the explicit Save still completes it and Discard
+    /// still removes it.
     func finish() -> RideRecord {
         if isRecording {
             isRecording = false
             tickTask?.cancel()
             altimeter.stop()
+        }
+        if let store {
+            let snapshot = record(complete: false)
+            Task { await store.checkpoint(snapshot) }
         }
         return record(complete: true)
     }
@@ -135,7 +142,7 @@ final class RideRecorder {
                 altitudeMeters: resolvedAltitude(gps: location),
                 speedMs: location.speed >= 0 ? location.speed : nil
             )
-        } else if let fallback = fallbackSample() {
+        } else if locationService.allowsSimulation, let fallback = fallbackSample() {
             input = RideAggregator.Input(
                 timestamp: rideClock,
                 latitude: fallback.coordinate.latitude,

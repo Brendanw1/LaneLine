@@ -15,6 +15,7 @@ struct RouteDetailView: View {
     let isRecommended: Bool?
 
     @State private var destinationRacks: [BikeParkingRack] = []
+    @State private var racksLoaded = false
     /// True once the docked "Start Ride" button (the real one, at the end of
     /// the scroll content) has scrolled into view — at that point the
     /// floating copy hides so the docked one takes over seamlessly.
@@ -34,7 +35,7 @@ struct RouteDetailView: View {
                         headerCard
                         explanationCard
                         elevationCard
-                        if !destinationRacks.isEmpty {
+                        if racksLoaded {
                             bikeParkingCard
                         }
                         segmentsCard
@@ -73,6 +74,7 @@ struct RouteDetailView: View {
         .task {
             guard let destination = route.allCoordinates.last else { return }
             destinationRacks = await services.bikeParkingService.racks(near: destination, limit: 4)
+            racksLoaded = true
         }
     }
 
@@ -93,28 +95,34 @@ struct RouteDetailView: View {
                     .font(LaneLineDesign.Typography.sectionHeader)
                     .foregroundStyle(LaneLineDesign.Colors.textPrimary)
 
-                ForEach(Array(destinationRacks.enumerated()), id: \.element.id) { index, rack in
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(rack.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(LaneLineDesign.Colors.textPrimary)
-                                .lineLimit(1)
-                            Text(rackDetail(rack))
+                if destinationRacks.isEmpty {
+                    Text("No bike parking found near the destination.")
+                        .font(.subheadline)
+                        .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                } else {
+                    ForEach(Array(destinationRacks.enumerated()), id: \.element.id) { index, rack in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(rack.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(LaneLineDesign.Colors.textPrimary)
+                                    .lineLimit(1)
+                                Text(rackDetail(rack))
+                                    .font(LaneLineDesign.Typography.caption)
+                                    .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                            }
+                            Spacer()
+                            if let destination = route.allCoordinates.last {
+                                Text(RideFormat.distance(
+                                    GeoMath.distanceMeters(from: rack.coordinate, to: destination)
+                                ))
                                 .font(LaneLineDesign.Typography.caption)
                                 .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                            }
                         }
-                        Spacer()
-                        if let destination = route.allCoordinates.last {
-                            Text(RideFormat.distance(
-                                GeoMath.distanceMeters(from: rack.coordinate, to: destination)
-                            ))
-                            .font(LaneLineDesign.Typography.caption)
-                            .foregroundStyle(LaneLineDesign.Colors.textSecondary)
+                        if index < destinationRacks.count - 1 {
+                            Divider()
                         }
-                    }
-                    if index < destinationRacks.count - 1 {
-                        Divider()
                     }
                 }
             }

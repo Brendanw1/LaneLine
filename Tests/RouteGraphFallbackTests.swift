@@ -50,10 +50,10 @@ final class RouteGraphFallbackTests: XCTestCase {
         // Confirms this went through the bundled-source path, not the tiny
         // demo network.
         let source = await service.currentSource
-        if case .liveIngestion = source {
+        if case .bundledCity = source {
             // expected
         } else {
-            XCTFail("expected .liveIngestion (built from bundled sources), got \(source)")
+            XCTFail("expected .bundledCity (built from bundled sources), got \(source)")
         }
     }
 }

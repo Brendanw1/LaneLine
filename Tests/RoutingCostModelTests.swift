@@ -182,6 +182,41 @@ final class RoutingCostModelTests: XCTestCase {
         }
     }
 
+    func testHeuristicAdmissibleOnFastestDescentOffStreet() {
+        // Regression guard for the true-minimum edge: a max-speed descent
+        // just above the caution threshold on an off-street path with zero
+        // stress. This edge costs less than the old 1.4×-bound heuristic
+        // assumed, so it pins the facility-floor correction in place.
+        for bikeType in BikeType.allCases {
+            let base = model(bikeType)
+            let fastEdge = edge(
+                length: 1000, grade: -0.07,
+                facility: .offStreetPath, protection: .fullyProtected,
+                stress: 0, confidence: 1.0
+            )
+            XCTAssertLessThanOrEqual(
+                base.heuristicCost(distanceMeters: 1000),
+                base.cost(of: fastEdge),
+                "Heuristic overestimates fastest edge for \(bikeType)"
+            )
+            let wiggle = RoutingCostModel(
+                profile: .testProfile(bikeType: bikeType),
+                strategy: .balanced,
+                preferWiggle: true
+            )
+            let wiggleEdge = edge(
+                length: 1000, grade: -0.07,
+                facility: .offStreetPath, protection: .fullyProtected,
+                stress: 0, confidence: 1.0, isWiggleCorridor: true
+            )
+            XCTAssertLessThanOrEqual(
+                wiggle.heuristicCost(distanceMeters: 1000),
+                wiggle.cost(of: wiggleEdge),
+                "Heuristic overestimates fastest Wiggle edge for \(bikeType)"
+            )
+        }
+    }
+
     // MARK: Speed model — grade differentiation
 
     /// Real SF streets range from flat to ~30% grade. The old linear model

@@ -114,6 +114,7 @@ struct MusicNowPlayingView: View {
                     }
                 )
                 .tint(accentColor)
+                .disabled(item.durationSeconds <= 0)
 
                 HStack {
                     Text(timeString(displayed))
@@ -287,7 +288,7 @@ struct MusicNowPlayingView: View {
                 artist: item.artist,
                 album: item.albumTitle.isEmpty ? nil : item.albumTitle,
                 durationSeconds: item.durationSeconds > 0 ? item.durationSeconds : nil
-            ), !result.isEmpty {
+            ) {
                 lyricsState = .loaded(result)
             } else {
                 lyricsState = .unavailable

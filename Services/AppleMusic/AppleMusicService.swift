@@ -28,6 +28,8 @@ protocol MusicServicing: AnyObject, Observable {
     func refreshConnectionState() async
     /// Begin mirroring player state into `nowPlaying`. Idempotent.
     func startObservingPlayback()
+    /// Stop mirroring player state and cancel the subscription stream.
+    func stopObservingPlayback()
 
     func playPause() async
     func skipNext() async
@@ -140,7 +142,7 @@ final class AppleMusicService: MusicServicing {
     /// observable properties, and tracks subscription changes for the life
     /// of the app (family plan lapses, new sign-ins, etc.).
     func startObservingPlayback() {
-        guard cancellables.isEmpty else { return }
+        guard cancellables.isEmpty && subscriptionTask == nil else { return }
 
         player.state.objectWillChange
             .receive(on: DispatchQueue.main)
@@ -159,6 +161,12 @@ final class AppleMusicService: MusicServicing {
         }
 
         refreshNowPlaying()
+    }
+
+    func stopObservingPlayback() {
+        subscriptionTask?.cancel()
+        subscriptionTask = nil
+        cancellables.removeAll()
     }
 
     private func refreshNowPlaying() {
@@ -407,8 +415,10 @@ final class MockMusicService: MusicServicing {
         self.connectionState = connectionState
         self.playbackControls = connectionState == .authorizedSubscribed ? .full : .unavailable
         if connectionState == .authorizedSubscribed {
-            self.nowPlaying = orderedQueue.first
-            self.upcomingQueue = orderedQueue
+            var current = orderedQueue[0]
+            current.isPlaying = playingFlag
+            self.nowPlaying = current
+            self.upcomingQueue = orderedQueue.map { item(for: $0) }
         }
     }
 
@@ -420,11 +430,12 @@ final class MockMusicService: MusicServicing {
 
     func refreshConnectionState() async {}
     func startObservingPlayback() {}
+    func stopObservingPlayback() {}
 
     func playPause() async {
-        guard var item = nowPlaying else { return }
-        item.isPlaying.toggle()
-        nowPlaying = item
+        guard nowPlaying != nil else { return }
+        playingFlag.toggle()
+        applyCurrent()
     }
 
     func skipNext() async {
@@ -434,10 +445,16 @@ final class MockMusicService: MusicServicing {
     }
 
     func skipPrevious() async {
-        guard let last = orderedQueue.popLast() else { return }
+        guard orderedQueue.count > 1, let last = orderedQueue.popLast() else { return }
         orderedQueue.insert(last, at: 0)
         applyCurrent()
     }
+
+    /// Track play/pause as a property rather than baking it into the
+    /// queue-item struct: skipping past a paused track would otherwise
+    /// reset the new current item's `isPlaying` back to the structural
+    /// default (`true`) baked in at construction.
+    private var playingFlag = true
 
     func startPlaylist(id: String) async {
         applyCurrent()
@@ -474,6 +491,7 @@ final class MockMusicService: MusicServicing {
 
     func playQueueEntry(id: String) async {
         guard let index = orderedQueue.firstIndex(where: { $0.id == id }) else { return }
+        guard index != 0 else { return }
         orderedQueue.insert(orderedQueue.remove(at: index), at: 0)
         applyCurrent()
     }
@@ -484,7 +502,7 @@ final class MockMusicService: MusicServicing {
         if wasCurrent {
             applyCurrent()
         } else {
-            upcomingQueue = orderedQueue
+            upcomingQueue = orderedQueue.map { item(for: $0) }
         }
     }
 
@@ -493,9 +511,26 @@ final class MockMusicService: MusicServicing {
         applyCurrent()
     }
 
+    private func item(for base: NowPlayingItem) -> NowPlayingItem {
+        var item = base
+        item.isPlaying = base.id == orderedQueue.first?.id && playingFlag
+        return item
+    }
+
     private func applyCurrent() {
-        nowPlaying = orderedQueue.first
-        upcomingQueue = orderedQueue
-        trackStartedAt = .now
+        let previousID = nowPlaying?.id
+        guard let first = orderedQueue.first else {
+            nowPlaying = nil
+            upcomingQueue = []
+            trackStartedAt = .now
+            return
+        }
+        var current = first
+        current.isPlaying = playingFlag
+        nowPlaying = current
+        upcomingQueue = orderedQueue.map { item(for: $0) }
+        if previousID != first.id {
+            trackStartedAt = .now
+        }
     }
 }

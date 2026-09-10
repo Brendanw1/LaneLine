@@ -180,7 +180,7 @@ struct RoutingWeights {
             // The motor does the climbing, so perceived climb burden is a
             // fraction of an acoustic bike's — hills stop being detour-worthy.
             return RoutingWeights(
-                climbSecondsPerMeter: 0.5,
+                climbSecondsPerMeter: 0.15,
                 steepGradeThreshold: 0.12,
                 steepGradePenaltyFactor: 10,
                 stressWeight: 1.0,
@@ -299,18 +299,22 @@ struct RoutingCostModel {
         }
     }
 
-    /// Admissible A* heuristic: straight-line distance at a fast but
-    /// realistic upper-bound speed. The previous formula used `0.75 *
-    /// distance / (baseSpeed * 1.4 / 3.6)` which algebraically inflated
-    /// the implied speed to ~37 km/h for a road bike — wildly optimistic,
-    /// causing A* to explore far more nodes than necessary. Removing the
-    /// `0.75` multiplier keeps the same 1.4× speed bound (necessary for
-    /// admissibility against the cheapest synthetic downhill-protected
-    /// edge) but produces ~28 km/h instead of ~37 km/h, which is enough
-    /// tighter for A* to prune effectively while still never
-    /// overestimating remaining cost.
+    /// Admissible A* heuristic: straight-line distance at the fastest speed
+    /// any edge can actually achieve after all cost multipliers. The cheapest
+    /// possible edge is a max-speed descent (1.35× per `CyclingSpeedModel`)
+    /// on an off-street path (`offStreetFactor` floor 0.80), so the speed
+    /// bound must be 1.35 / 0.80 ≈ 1.69 — a bare 1.4× bound overestimates
+    /// remaining cost by ~20% on downhill-path segments and lets A* return
+    /// suboptimal routes. When `preferWiggle` is on, the Wiggle discount
+    /// (0.80) lowers the floor further and joins the bound. Every other
+    /// multiplier (stress, surface, confidence, smoothness, climb, spike,
+    /// caution) only adds cost, so this bound never overestimates.
     func heuristicCost(distanceMeters: Double) -> Double {
-        let maxSpeedMs = CyclingSpeedModel.baseSpeedKmh(for: bikeType) * 1.4 / 3.6
+        var bound = 1.35 / weights.offStreetFactor
+        if preferWiggle {
+            bound /= Self.wiggleFactor
+        }
+        let maxSpeedMs = CyclingSpeedModel.baseSpeedKmh(for: bikeType) * bound / 3.6
         return distanceMeters / maxSpeedMs
     }
 }
