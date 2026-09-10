@@ -18,53 +18,8 @@ private final class VoiceRecorder: RideVoiceGuiding {
     func stopSpeaking() { stopped = true }
 }
 
-private actor StubRoutingService: RoutingServiceProtocol {
-    let canned: RouteCandidate
-    private(set) var requestedOrigins: [CLLocationCoordinate2D] = []
-
-    init(canned: RouteCandidate) { self.canned = canned }
-
-    func generateRoutes(
-        from origin: CLLocationCoordinate2D,
-        to destination: CLLocationCoordinate2D,
-        profile: RiderProfile
-    ) async throws -> [RouteCandidate] {
-        try await generateRoutes(
-            from: origin, to: destination, profile: profile, strategies: [.balanced]
-        )
-    }
-
-    func generateRoutes(
-        from origin: CLLocationCoordinate2D,
-        to destination: CLLocationCoordinate2D,
-        profile: RiderProfile,
-        strategies: [RouteStrategyType]
-    ) async throws -> [RouteCandidate] {
-        requestedOrigins.append(origin)
-        return [canned]
-    }
-
-    func generateRoutes(
-        from origin: CLLocationCoordinate2D,
-        to destination: CLLocationCoordinate2D,
-        profile: RiderProfile,
-        strategies: [RouteStrategyType],
-        preferWiggle: Bool
-    ) async throws -> [RouteCandidate] {
-        try await generateRoutes(from: origin, to: destination, profile: profile, strategies: strategies)
-    }
-
-    func scoreRoute(
-        _ route: RouteCandidate, profile: RiderProfile
-    ) async throws -> RouteScoreBreakdown {
-        route.scoreBreakdown ?? RouteScoreBreakdown(
-            travelTimeScore: 0, climbPenalty: 0, maxGradePenalty: 0,
-            protectedLaneBonus: 0, bikeLaneBonus: 0, offStreetBonus: 0,
-            arterialPenalty: 0, roughSurfacePenalty: 0, crossingPenalty: 0,
-            detourPenalty: 0, descentPenalty: 0
-        )
-    }
-}
+// `StubRoutingService` is defined in `TestSupport.swift` so the edge-case
+// tests can reuse it.
 
 // MARK: - Tests
 

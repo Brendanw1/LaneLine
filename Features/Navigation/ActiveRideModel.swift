@@ -126,8 +126,13 @@ final class ActiveRideModel {
         if let segment = currentSegment {
             let boundary = segmentBoundaries[safe: index] ?? 0
             let intoSegment = progressMeters - boundary
+            // Clamp into [0, 1] so a snap that places progress before the
+            // current segment's boundary (e.g. right after a reroute)
+            // can't drive `fractionLeft` above 1 and over-report the
+            // remaining climb on this segment.
             let fractionLeft = segment.lengthMeters > 0
-                ? max(0, 1 - intoSegment / segment.lengthMeters) : 0
+                ? min(1, max(0, 1 - intoSegment / segment.lengthMeters))
+                : 0
             remaining += segment.elevationGainMeters * fractionLeft
         }
         return remaining

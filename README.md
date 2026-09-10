@@ -103,7 +103,7 @@ Resources/      Bundled SF street network + bikeway CSVs + elevation cache
                 (see NOTICE.md for data provenance/licensing),
                 SFSampleNetwork.json (fallback demo network)
 Scripts/        generate_sample_network.py (provenance for the sample data)
-Tests/          XCTest suite (122 tests)
+Tests/          XCTest suite (124 tests)
 ```
 
 Services are protocol-typed and injected through `ServiceContainer` in the
