@@ -30,7 +30,12 @@ final class ActiveRideModel {
     var totalMeters: Double { flattened.last?.cumulative ?? 0 }
     var remainingMeters: Double { max(0, totalMeters - progressMeters) }
     var fractionComplete: Double { totalMeters > 0 ? progressMeters / totalMeters : 0 }
-    var isComplete: Bool { remainingMeters < 10 }
+    /// An empty / zero-length route is not "complete" — it's degenerate
+    /// and shouldn't auto-fire the arrival phrase. The route shouldn't
+    /// reach the ride screen in this state in practice, but defending
+    /// here means a malformed route gets the same treatment as an
+    /// out-of-route stall rather than a premature "You've arrived" UI.
+    var isComplete: Bool { totalMeters > 0 && remainingMeters < 10 }
 
     var currentCoordinate: CLLocationCoordinate2D {
         interpolatedPosition(at: progressMeters)?.coordinate

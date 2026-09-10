@@ -25,6 +25,12 @@ struct RoutingWeights {
     var descentCautionFactor: Double
     /// Descents steeper than this trigger the caution factor.
     var descentCautionThreshold: Double = -0.08
+    /// Scales the yo-yo / grade-variance surcharge on edges whose raw
+    /// segment has high grade variance. Catches the case where a single
+    /// short steep block sits on an otherwise flat street (high
+    /// variance, low total climb) — the spike penalty sees the steep
+    /// block but not the *character* of the street.
+    var smoothnessWeight: Double = 0.4
 
     // MARK: Resolution
 
@@ -267,6 +273,14 @@ struct RoutingCostModel {
         // Low-confidence attribution earns a mild hedge so uncertain edges
         // lose ties against well-understood ones.
         cost *= 1 + (1 - edge.confidenceScore) * 0.15
+
+        // Grade-variance / yo-yo character of the street. Distinct from
+        // the spike penalty above: that one fires when *this* edge is
+        // steep; this one fires when the *street as a whole* flips
+        // between climb and descent more than the terrain requires.
+        // Catches "flat street with one short steep block" where the
+        // spike penalty sees only the block but the rider sees a yo-yo.
+        cost *= 1 + weights.smoothnessWeight * edge.smoothnessPenalty
 
         if preferWiggle && edge.isWiggleCorridor {
             cost *= Self.wiggleFactor

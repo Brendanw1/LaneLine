@@ -30,7 +30,8 @@ final class RoutingCostModelTests: XCTestCase {
             confidenceScore: confidence,
             streetName: nil,
             geometry: [],
-            isWiggleCorridor: isWiggleCorridor
+            isWiggleCorridor: isWiggleCorridor,
+            smoothnessPenalty: 0
         )
     }
 

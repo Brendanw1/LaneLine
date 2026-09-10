@@ -294,6 +294,7 @@ Every route segment should contribute to the total route score using a weighted 
 - rider bike type
 - rider route preferences
 - a hill-burden surcharge that scales past `steepGradeThreshold` (with a much stronger floor under the Easier Climbing strategy so a single steep block forces A* to detour around it)
+- a *smoothness* surcharge from a per-street grade-variance score (`smoothnessPenalty` on each `RouteGraph.Edge`, normalized 0…1 at graph build time). The spike penalty above catches single steep edges; smoothness catches *yo-yo* — a street with mostly flat edges and one short steep block scores high and gets pushed out in favor of a longer but smoother alternative, while a sustained-climb street (high grade everywhere but low variance) scores low. This is the cost-model term that catches "feels terrible to ride" profiles the spike penalty alone misses.
 
 The descent model caps speed at 1.35× flat below −10% and tightens the cap as steepness grows past that threshold — riders brake hard on steep downhills rather than accelerating. The e-bike walking-pace floor reflects real e-bike physics (motor assist dies around 8–10%, then the rider's own legs take over).
 

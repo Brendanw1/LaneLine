@@ -145,15 +145,22 @@ struct NetworkGraphBuilder {
             let to: Int
             let geometry: [RouteCoordinate]
             let raw: RawNetworkEdge
+            /// Index into `rawEdges` so the smoothness second-pass can
+            /// group micro-edges by which street they came from without
+            /// needing `RawNetworkEdge` to be `Hashable`.
+            let rawIndex: Int
         }
 
         var microEdges: [MicroEdge] = []
-        for raw in rawEdges {
+        for (rawIndex, raw) in rawEdges.enumerated() {
             for (a, b) in zip(raw.geometry, raw.geometry.dropFirst()) {
                 let fromID = nodeID(for: a)
                 let toID = nodeID(for: b)
                 guard fromID != toID else { continue }
-                microEdges.append(MicroEdge(from: fromID, to: toID, geometry: [a, b], raw: raw))
+                microEdges.append(MicroEdge(
+                    from: fromID, to: toID, geometry: [a, b],
+                    raw: raw, rawIndex: rawIndex
+                ))
             }
         }
 
@@ -186,25 +193,65 @@ struct NetworkGraphBuilder {
             )
         }
 
+        // First pass: compute length and signed grade for every micro-edge
+        // that survives the minimum-length filter, so the smoothness pass
+        // has the grades it needs without recomputing the polyline length.
+        let graded: [(micro: MicroEdge, length: Double, grade: Double)] = microEdges
+            .filter { GeoMath.polylineLengthMeters($0.geometry) > 0.5 }
+            .map { micro in
+                let length = GeoMath.polylineLengthMeters(micro.geometry)
+                let grade = signedGrade(
+                    from: elevations[micro.from],
+                    to: elevations[micro.to],
+                    lengthMeters: length
+                )
+                return (micro: micro, length: length, grade: grade)
+            }
+
+        // Second pass: smoothness per raw edge. Variance of grade across
+        // all surviving micro-edges of one street segment is the simplest
+        // proxy for "yo-yo character" available without reconstructing
+        // corridor order — a flat street scores 0, a steady 6% climb
+        // scores 0, and a yo-yo at the same average climb scores high.
+        // Group by rawIndex so each street is scored once and the
+        // micro-edges of one street share that score.
+        var gradesByRaw: [Int: [Double]] = [:]
+        for g in graded {
+            gradesByRaw[g.micro.rawIndex, default: []].append(g.grade)
+        }
+        var rawSmoothness: [Int: Double] = [:]
+        for (rawIndex, grades) in gradesByRaw {
+            if grades.count > 1 {
+                let mean = grades.reduce(0, +) / Double(grades.count)
+                let sumSq = grades.reduce(0) { $0 + ($1 - mean) * ($1 - mean) }
+                rawSmoothness[rawIndex] = sumSq / Double(grades.count)
+            } else {
+                rawSmoothness[rawIndex] = 0
+            }
+        }
+        // Compress raw-edge variances into 0...1 by the graph's own max so
+        // the cost-model weight is interpretable regardless of which city
+        // the data covers.
+        var normalizedSmoothness: [Int: Double] = [:]
+        if let maxVar = rawSmoothness.values.max(), maxVar > 0 {
+            for (k, v) in rawSmoothness {
+                normalizedSmoothness[k] = min(1, v / maxVar)
+            }
+        }
+
         var edges: [RouteGraph.Edge] = []
-        for micro in microEdges {
-            let length = GeoMath.polylineLengthMeters(micro.geometry)
-            guard length > 0.5 else { continue }
-
-            let grade = signedGrade(
-                from: elevations[micro.from],
-                to: elevations[micro.to],
-                lengthMeters: length
-            )
-
+        for g in graded {
+            let smoothness = normalizedSmoothness[g.micro.rawIndex] ?? 0
             appendDirectedEdge(
-                &edges, from: micro.from, to: micro.to,
-                geometry: micro.geometry, length: length, grade: grade, raw: micro.raw
+                &edges, from: g.micro.from, to: g.micro.to,
+                geometry: g.micro.geometry, length: g.length, grade: g.grade,
+                smoothness: smoothness, raw: g.micro.raw
             )
-            if !micro.raw.oneWay {
+            if !g.micro.raw.oneWay {
                 appendDirectedEdge(
-                    &edges, from: micro.to, to: micro.from,
-                    geometry: micro.geometry.reversed(), length: length, grade: -grade, raw: micro.raw
+                    &edges, from: g.micro.to, to: g.micro.from,
+                    geometry: g.micro.geometry.reversed(), length: g.length, grade: -g.grade,
+                    smoothness: smoothness, raw: g.micro.raw
                 )
             }
         }
@@ -263,6 +310,7 @@ struct NetworkGraphBuilder {
         geometry: [RouteCoordinate],
         length: Double,
         grade: Double,
+        smoothness: Double,
         raw: RawNetworkEdge
     ) {
         let stress = raw.stressOverride ?? StressModel.segmentStress(
@@ -290,7 +338,8 @@ struct NetworkGraphBuilder {
             confidenceScore: confidence(for: raw, hasGrade: grade != 0 || length < 30),
             streetName: raw.streetName,
             geometry: geometry,
-            isWiggleCorridor: raw.isWiggleCorridor
+            isWiggleCorridor: raw.isWiggleCorridor,
+            smoothnessPenalty: smoothness
         ))
     }
 

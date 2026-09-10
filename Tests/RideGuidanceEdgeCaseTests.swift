@@ -66,4 +66,40 @@ final class RideGuidanceEdgeCaseTests: XCTestCase {
         XCTAssertEqual(model.remainingMeters, max(0, model.totalMeters - model.progressMeters))
         XCTAssertLessThanOrEqual(model.remainingMeters, model.totalMeters + 0.001)
     }
+
+    /// An empty route (zero segments) must NOT be reported as
+    /// "complete" — that would auto-fire the arrival phrase on a
+    /// degenerate route. Defensive guard so a malformed route stalls
+    /// rather than announcing a fake arrival.
+    func testEmptyRouteIsNotReportedComplete() {
+        let emptyRoute = RouteCandidate(
+            id: UUID(),
+            label: "Empty",
+            strategyType: .balanced,
+            segments: [],
+            totalDistanceMeters: 0,
+            etaSeconds: 0,
+            totalElevationGainMeters: 0,
+            maxGrade: 0,
+            protectedLanePercent: 0,
+            bikeFacilityPercent: 0,
+            roadBikeSuitabilityScore: 0,
+            routeStressScore: 0,
+            directnessScore: 0,
+            confidenceScore: 0,
+            estimatedCalories: 0,
+            usedWiggleCorridor: false
+        )
+        let model = ActiveRideModel(
+            route: emptyRoute,
+            profile: .testProfile(bikeType: .hybridFitness),
+            locationService: MockLocationService(coordinate: nil),
+            routingService: StubRoutingService(canned: emptyRoute),
+            voiceGuide: nil
+        )
+        XCTAssertEqual(model.totalMeters, 0)
+        XCTAssertFalse(model.isComplete, "Empty route must not auto-fire the arrival phrase")
+        XCTAssertEqual(model.remainingMeters, 0)
+        XCTAssertEqual(model.fractionComplete, 0)
+    }
 }
