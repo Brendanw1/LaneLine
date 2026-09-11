@@ -23,7 +23,9 @@ Run the `LaneLine` scheme on an iOS 17+ simulator or device. Tests:
 
 ```sh
 xcodebuild test -project LaneLine.xcodeproj -scheme LaneLine \
-  -destination 'platform=iOS Simulator,name=iPhone 17'
+  -destination 'platform=iOS Simulator,name=iPhone 17'   # unit tests
+xcodebuild test -project LaneLine.xcodeproj -scheme LaneLineUITests \
+  -destination 'platform=iOS Simulator,name=iPhone 17'   # end-to-end ride flow
 ```
 
 ### Demo ride
@@ -35,6 +37,11 @@ ride-screen iteration and screenshots:
 ```sh
 xcrun simctl launch booted com.laneline.LaneLine -demoRide
 ```
+
+Add `-demoTimeScale N` (DEBUG only) to compress simulated ride time by a
+factor of N, so a full ~17-minute ride completes in seconds — that's what
+the UI test uses to ride to arrival, end, save, and verify history in under
+a minute.
 
 ### Run it on your phone
 
@@ -61,6 +68,23 @@ DataSF/OSM sources for freshest data; full city-wide elevation is
 already present in the bundled cache, so the default path is no longer
 flat-grade.
 
+### Grade and climb awareness
+
+The live grade chip prefers the **measured slope** — barometer over a
+trailing 20 m window (with stationary-tick filtering so drift can't
+masquerade as grade) — and falls back to the route's segment average only
+for the first meters, before a measurement window exists. It reads "the
+hill under your wheels," not the map's guess.
+
+Looking ahead, the ride scans the next ~300 m of route terrain for steep
+runs (≥6% held for ≥30 m — intersection crowns and DEM noise don't qualify).
+A warning chip (`8% climb in 200 m`) shows from detection; when the climb
+closes inside ~200 m a system chime plays **mixed into your music** (no
+ducking), followed by a terse "Steep climb ahead" — so music dims for about
+a second and swells right back. One warning per climb; once you're on the
+ramp the live grade chip takes over, and the map still paints >8% segments
+orange further ahead. "Climb left" remains the whole-route number.
+
 ### Apple Music on device
 
 MusicKit needs the **MusicKit app service** enabled for the bundle ID
@@ -69,6 +93,18 @@ MusicKit needs the **MusicKit app service** enabled for the bundle ID
 no entitlement file to manage. On simulator, authorization succeeds but
 playback control requires a device signed into an Apple Music subscription;
 the app degrades to a "connect" prompt state otherwise.
+
+### Apple Watch heart rate
+
+The ride screen reads live heart rate from HealthKit — no companion watchOS
+app required. While the Apple Watch records a workout (or is otherwise
+streaming to Health), beats land in HealthKit every few seconds and an
+observer query surfaces them: a live BPM chip on the ride screen
+(toggle in *Settings → Ride screen → Heart rate*), per-sample BPM in the
+recorded ride, and avg/max HR on the ride summary. Readings older than 60 s
+are treated as absent — a stale number on a moving screen is worse than no
+number. First ride triggers the Health read permission once; if denied, the
+metric simply never appears.
 
 ### DataSF app token (optional)
 
@@ -230,10 +266,15 @@ Dynamic-Island-styled banner, so navigation guidance is never fully hidden.
 | Lyrics | Real HTTP client against LRCLIB; best-effort, not every track matches |
 | Location | Real `CLLocationManager`; `MockLocationService` (Valencia & 16th) for previews/simulator |
 | Ride progress during navigation | Live GPS when on-route; sustained off-route drift freezes progress and auto-reroutes from the rider's real position (snapped to the new route, not reset to its start); a failed reroute shows a "Couldn't reroute" chip instead of going silent; simulation only when there is no fix at all (simulator/demo) — with location denied or GPS lost on a real device, progress freezes under a "No GPS" chip and recording leaves gaps rather than inventing movement |
-| Voice guidance | Real `AVSpeechSynthesizer` turn-by-turn prompts that duck music during announcements, plus 500 m / 100 m destination countdowns; mute toggle is functional |
+| Ride-screen motion | The position puck renders at ~30 Hz: it glides between 1 Hz GPS fixes at the rider's measured speed (`CLLocation.speed`), never leads the last confirmed fix by more than ~1.2 s of travel, and eases onto a new fix instead of teleporting — the camera tracks it per frame, with eased transitions reserved for real jumps (start, recenter, reroute) |
+| Camera orientation | Heading-up (default, map rotates with travel) ↔ north-up toggle on the ride screen, persisted per rider; the puck arrow carries the rotation in north-up mode; panning suspends follow until Recenter |
+| Voice guidance | Real `AVSpeechSynthesizer` turn-by-turn prompts that duck music during announcements, plus 500 m / 100 m destination countdowns; climb warnings add a mixed-in chime plus a ~1 s phrase so music dims briefly but never stops; mute toggle is functional |
+| Grade & climb warning | Grade chip prefers the measured 20 m-window barometric slope (route segment average as fallback); the next ~300 m of route terrain is scanned for ≥6%/≥30 m runs — warning chip from detection, chime + terse phrase at ~200 m, once per climb |
 | Persistence | Real UserDefaults-backed store |
 | Ride statistics (speed, elevation, calories) | Real: GPS + barometer through `RideAggregator`; physics-based calorie model; demo mode feeds the same pipeline from the simulated position |
 | Ride recording | Real file-backed `RideStore` (JSON per ride + summaries index in Application Support), 60 s crash checkpoints |
+| Heart rate | Real HealthKit read (observer + freshness-gated fetch) of the Apple Watch's stream; live chip, per-sample capture, summary totals; mock for demo/previews |
+| Health export | Real `HKWorkoutBuilder` (cycling workout + route samples) |
 
 ## License
 

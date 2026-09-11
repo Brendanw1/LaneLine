@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 
 // MARK: - Phrases
 
@@ -24,6 +25,11 @@ enum RideAnnouncements {
     static let offRoute = "Off route. Recalculating."
     static let rerouted = "Route updated."
     static let arrival = "You have arrived at your destination."
+
+    /// Deliberately terse: the climb chip on screen carries the numbers
+    /// (grade, distance, length), and every spoken second is a second the
+    /// rider's music stays dimmed. The alert chime plays before this.
+    static let climbAhead = "Steep climb ahead."
 
     /// Spoken approach to the destination, fired once when the rider
     /// crosses each threshold so they get an early warning before the
@@ -76,6 +82,16 @@ protocol RideVoiceGuiding: AnyObject {
     var isMuted: Bool { get set }
     func announce(_ phrase: String)
     func stopSpeaking()
+    /// Non-speech cue (climb warning chime). A protocol REQUIREMENT, not
+    /// just an extension default — extension methods bind statically on an
+    /// `any` existential, so conformers' overrides would never run.
+    func playAlertSound()
+}
+
+extension RideVoiceGuiding {
+    /// Default no-op so lightweight test mocks only implement what they
+    /// assert on.
+    func playAlertSound() {}
 }
 
 /// Speaks guidance over the rider's music: the audio session ducks other
@@ -109,6 +125,20 @@ final class RideVoiceGuide: NSObject, RideVoiceGuiding, AVSpeechSynthesizerDeleg
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         synthesizer.speak(utterance)
     }
+
+    /// Quick mixed-in chime for the climb warning: plays *alongside* music
+    /// with no ducking — the ping alone should be enough to notice, and the
+    /// terse phrase that follows ducks music only for its ~1 second. If no
+    /// music is playing, duckOthers is a no-op and this is just the chime
+    /// plus the phrase.
+    func playAlertSound() {
+        guard !isMuted else { return }
+        AudioServicesPlaySystemSound(Self.climbAlertSound)
+    }
+
+    /// System "Tink" — subtle and distinct from the turn-guidance voice.
+    /// Swap the ID here if a custom tone lands in the asset catalog.
+    private static let climbAlertSound: SystemSoundID = 1104
 
     func stopSpeaking() {
         synthesizer.stopSpeaking(at: .immediate)

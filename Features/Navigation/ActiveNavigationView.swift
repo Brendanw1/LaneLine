@@ -15,6 +15,7 @@ struct ActiveNavigationView: View {
     @State private var camera: MapCameraPosition = .automatic
     @State private var isFollowSuspended = false
     @State private var lastCommandedCamera: MapCamera?
+    @State private var showEndConfirmation = false
 
     /// Beyond any of these, a settled camera that doesn't match what we
     /// last commanded ourselves is treated as a user gesture, not our own
@@ -22,6 +23,10 @@ struct ActiveNavigationView: View {
     private static let followSuspendDistanceEpsilonMeters: Double = 15
     private static let followSuspendHeadingEpsilonDegrees: Double = 8
     private static let followSuspendZoomEpsilonMeters: Double = 200
+    /// Camera moves beyond these get an eased transition instead of
+    /// per-frame tracking (ride start, recenter, reroute, orientation flip).
+    private static let cameraJumpAnimationMeters: Double = 25
+    private static let cameraJumpAnimationDegrees: Double = 15
     @State private var recorder: RideRecorder?
     @State private var pageIndex = 0
     @State private var destinationRacks: [BikeParkingRack] = []
@@ -116,13 +121,17 @@ struct ActiveNavigationView: View {
                 fallbackSample: { [weak model] in
                     guard let model else { return nil }
                     return RideRecorder.FallbackSample(
-                        coordinate: model.currentCoordinate,
+                        coordinate: model.displayCoordinate,
                         speedKmh: model.currentSpeedKmh,
                         altitudeMeters: model.currentElevationMeters
                     )
-                }
+                },
+                heartRate: services.heartRateService
             )
             rideRecorder.start()
+            // Watch heart rate: authorization (once ever) + observer start
+            // alongside the ride; stopped when the ride screen leaves.
+            Task { await services.heartRateService.start() }
             recorder = rideRecorder
 
             // A mounted phone must not lock mid-ride.
@@ -140,6 +149,7 @@ struct ActiveNavigationView: View {
         }
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
+            services.heartRateService.stop()
             if let recorder, recorder.isRecording { _ = recorder.finish() }
             ride?.end()
         }
@@ -172,11 +182,10 @@ struct ActiveNavigationView: View {
             }
             // A plain SwiftUI `Annotation` stays screen-upright regardless
             // of the map's rotation (unlike geometry overlays, which rotate
-            // with it) — since the camera below is already heading-locked,
-            // "up on screen" already means "current direction of travel," so
-            // a fixed north-pointing arrow here is already correctly
-            // oriented with no extra rotation math needed.
-            Annotation("", coordinate: ride.currentCoordinate) {
+            // with it). Heading-up needs no extra rotation — "up on screen"
+            // already means "direction of travel" — but in north-up mode the
+            // camera holds still, so the arrow itself rotates to bear.
+            Annotation("", coordinate: ride.displayCoordinate) {
                 ZStack {
                     Circle()
                         .fill(LaneLineDesign.Colors.primary)
@@ -188,19 +197,22 @@ struct ActiveNavigationView: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.white)
                 }
+                .rotationEffect(.degrees(
+                    customization.cameraOrientation == .northUp ? ride.displayHeading : 0
+                ))
                 .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
             }
         }
         .mapStyle(.standard(elevation: .realistic))
         .ignoresSafeArea()
-        .onChange(of: ride.progressMeters, initial: true) {
+        .onChange(of: ride.displayProgressMeters, initial: true) {
             guard !isFollowSuspended else { return }
-            // Duration runs a touch past the 1s tick interval so consecutive
-            // camera animations always overlap slightly instead of settling
-            // and re-starting each tick — that dead stop-start is what read
-            // as choppy before. Ease in/out reads as far more fluid than
-            // linear for the heading swing through a turn specifically.
-            commitFollowCamera(ride, animation: .easeInOut(duration: 1.1))
+            // Runs at render cadence (~30 Hz): the puck glides between
+            // logic ticks and the camera tracks it with imperceptible
+            // per-frame deltas instead of the old 1 Hz ease-in-out that
+            // read as stop-start. commitFollowCamera still animates the
+            // genuinely big moves (ride start, recenter, reroute).
+            commitFollowCamera(ride)
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             guard let lastCommandedCamera else { return }
@@ -221,9 +233,9 @@ struct ActiveNavigationView: View {
 
     private func followCamera(_ ride: ActiveRideModel) -> MapCamera {
         MapCamera(
-            centerCoordinate: ride.currentCoordinate,
+            centerCoordinate: ride.displayCoordinate,
             distance: 900,
-            heading: ride.displayHeading,
+            heading: customization.cameraOrientation == .headingUp ? ride.displayHeading : 0,
             pitch: 40
         )
     }
@@ -232,10 +244,34 @@ struct ActiveNavigationView: View {
     /// `onMapCameraChange` always has a ground truth to diff a settled
     /// camera against — the only way a discrepancy can appear is a user
     /// gesture, since nothing else ever touches `camera` directly.
-    private func commitFollowCamera(_ ride: ActiveRideModel, animation: Animation) {
+    ///
+    /// Animation is chosen by the size of the move, not by the caller:
+    /// render-cadence deltas (sub-meter) apply instantly so the map tracks
+    /// the puck continuously, while a real jump — ride start, recenter,
+    /// reroute, orientation flip — gets an eased transition.
+    private func commitFollowCamera(_ ride: ActiveRideModel, animated: Bool? = nil) {
         let target = followCamera(ride)
+        let shouldAnimate: Bool
+        if let animated {
+            shouldAnimate = animated
+        } else if let last = lastCommandedCamera {
+            let jumpMeters = GeoMath.distanceMeters(
+                from: last.centerCoordinate, to: target.centerCoordinate
+            )
+            let headingJumpDegrees = abs(GeoMath.turnAngleDegrees(
+                fromBearing: last.heading, toBearing: target.heading
+            ))
+            shouldAnimate = jumpMeters > Self.cameraJumpAnimationMeters
+                || headingJumpDegrees > Self.cameraJumpAnimationDegrees
+        } else {
+            shouldAnimate = true
+        }
         lastCommandedCamera = target
-        withAnimation(animation) {
+        if shouldAnimate {
+            withAnimation(.easeInOut(duration: 0.6)) {
+                camera = .camera(target)
+            }
+        } else {
             camera = .camera(target)
         }
     }
@@ -260,6 +296,7 @@ struct ActiveNavigationView: View {
                     width: largerControls ? 52 : 44,
                     height: largerControls ? 52 : 44
                 )
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(LaneLineDesign.Colors.primary)
@@ -268,12 +305,55 @@ struct ActiveNavigationView: View {
     }
 
     private func trailingMapControls(_ ride: ActiveRideModel) -> some View {
-        VStack(spacing: LaneLineDesign.Spacing.small) {
-            if isFollowSuspended {
-                recenterButton(ride)
+        // Glass effects belong inside a container: bare `.glassEffect` on
+        // iOS 26 renders/hit-tests unreliably — the buttons drew in the
+        // right place but touches passed straight through them (found via
+        // UI-test tap probes). The bottom controls always sat inside a
+        // RideGlassContainer and never had the problem.
+        RideGlassContainer {
+            VStack(spacing: LaneLineDesign.Spacing.small) {
+                if isFollowSuspended {
+                    recenterButton(ride)
+                }
+                orientationButton(ride)
+                mapModeToggle
             }
-            mapModeToggle
         }
+    }
+
+    /// Heading-up ↔ north-up. Heading-up (the default) reads like a moving
+    /// map — "up" is always where you're going; north-up holds the map still
+    /// so streets stay readable while stopped. The choice persists through
+    /// RideScreenCustomization, and the puck arrow picks up the rotation
+    /// duty in north-up mode.
+    private func orientationButton(_ ride: ActiveRideModel) -> some View {
+        let isHeadingUp = customization.cameraOrientation == .headingUp
+        return Button {
+            var updated = customization
+            updated.cameraOrientation = isHeadingUp ? .northUp : .headingUp
+            appModel.updateCustomization(updated)
+            if !isFollowSuspended {
+                commitFollowCamera(ride, animated: true)
+            }
+        } label: {
+            Image(systemName: isHeadingUp ? "location.north.circle" : "navigation")
+                .font(.system(size: largerControls ? 22 : 18, weight: .semibold))
+                .frame(
+                    width: largerControls ? 52 : 44,
+                    height: largerControls ? 52 : 44
+                )
+                // The glass circle is applied OUTSIDE the button, so without
+                // an explicit content shape the tappable area is just the
+                // ~18pt glyph — taps a fraction off the icon fall through.
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(LaneLineDesign.Colors.primary)
+        .rideGlass(in: Circle(), interactive: true)
+        .accessibilityLabel(
+            isHeadingUp ? "Switch to north-up map" : "Switch to direction-of-travel map"
+        )
+.accessibilityIdentifier("ride.orientation")
     }
 
     /// Appears only while a manual pan/rotate/pinch has suspended auto-
@@ -282,7 +362,7 @@ struct ActiveNavigationView: View {
     private func recenterButton(_ ride: ActiveRideModel) -> some View {
         Button {
             isFollowSuspended = false
-            commitFollowCamera(ride, animation: .easeInOut(duration: 0.6))
+            commitFollowCamera(ride, animated: true)
         } label: {
             Image(systemName: "location.fill")
                 .font(.system(size: largerControls ? 22 : 18, weight: .semibold))
@@ -290,6 +370,7 @@ struct ActiveNavigationView: View {
                     width: largerControls ? 52 : 44,
                     height: largerControls ? 52 : 44
                 )
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(.white)
@@ -346,6 +427,16 @@ struct ActiveNavigationView: View {
             }
             if ride.rerouteFailed, !ride.isRerouting {
                 statusChip(text: "Couldn't reroute", icon: "exclamationmark.triangle", tint: LaneLineDesign.Colors.warning)
+            }
+            if let climb = ride.upcomingClimb {
+                statusChip(
+                    text: "\(RideFormat.grade(climb.maxGradeDecimal)) climb in \(RideFormat.distance(climb.distanceMeters))",
+                    icon: "mountain.2",
+                    tint: LaneLineDesign.Colors.warning
+                )
+                .accessibilityLabel(
+                    "Steep climb \(RideFormat.grade(climb.maxGradeDecimal)) in \(RideFormat.distance(climb.distanceMeters))"
+                )
             }
             if ride.isPaused {
                 statusChip(text: "Paused", icon: "pause.fill", tint: LaneLineDesign.Colors.warning)
@@ -422,13 +513,27 @@ struct ActiveNavigationView: View {
 
     private func secondaryMetricsRow(_ ride: ActiveRideModel, _ recorder: RideRecorder) -> some View {
         HStack(spacing: LaneLineDesign.Spacing.medium) {
-            if customization.visibleSecondaryMetrics.contains(.currentGrade) {
+            if customization.visibleSecondaryMetrics.contains(.heartRate),
+               let bpm = services.heartRateService.currentBPM {
                 secondaryChip(
-                    icon: ride.currentGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
-                    text: RideFormat.signedGrade(ride.currentGrade),
-                    tint: LaneLineDesign.Colors.grade(ride.currentGrade)
+                    icon: "heart.fill",
+                    text: RideFormat.wholeNumber(bpm),
+                    tint: LaneLineDesign.Colors.danger
                 )
-                .accessibilityLabel("Current grade \(RideFormat.signedGrade(ride.currentGrade))")
+                .accessibilityLabel("Heart rate \(RideFormat.wholeNumber(bpm)) beats per minute")
+            }
+            if customization.visibleSecondaryMetrics.contains(.currentGrade) {
+                // Prefer the measured slope — barometer over a trailing
+                // 20 m window, the honest grade under the wheels. The
+                // route segment's average covers the first meters, before
+                // a measurement window exists.
+                let displayedGrade = recorder.currentGradeDecimal ?? ride.currentGrade
+                secondaryChip(
+                    icon: displayedGrade >= 0 ? "arrow.up.right" : "arrow.down.right",
+                    text: RideFormat.signedGrade(displayedGrade),
+                    tint: LaneLineDesign.Colors.grade(displayedGrade)
+                )
+                .accessibilityLabel("Current grade \(RideFormat.signedGrade(displayedGrade))")
             }
             if customization.visibleSecondaryMetrics.contains(.climbRemaining) {
                 secondaryChip(
@@ -498,9 +603,7 @@ struct ActiveNavigationView: View {
             }
 
             Button {
-                ride.end()
-                let record = recorder?.finish()
-                appModel.finishRide(with: record)
+                showEndConfirmation = true
             } label: {
                 Label("End", systemImage: "xmark")
                     .font(.subheadline.weight(.bold))
@@ -510,6 +613,23 @@ struct ActiveNavigationView: View {
                         : LaneLineDesign.HitTarget.comfortable)
             }
             .prominentRideButtonStyle(tint: LaneLineDesign.Colors.danger)
+            .accessibilityIdentifier("ride.end")
+            // A mounted phone bounces; ending a ride is one tap on a big
+            // red target. Confirm before the ride is torn down.
+            .confirmationDialog(
+                "End this ride?",
+                isPresented: $showEndConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("End ride", role: .destructive) {
+                    ride.end()
+                    let record = recorder?.finish()
+                    appModel.finishRide(with: record)
+                }
+                Button("Keep riding", role: .cancel) {}
+            } message: {
+                Text("The ride summary opens so you can save it or discard it.")
+            }
         }
     }
 
@@ -531,6 +651,10 @@ struct ActiveNavigationView: View {
             interactive: true
         )
         .accessibilityLabel(label)
+        // Distinguishes ride controls from same-labeled music-bar controls
+        // ("Pause" exists in both rows) for UI tests and VoiceOver users
+        // scanning by container.
+        .accessibilityIdentifier("ride.control.\(label.lowercased())")
     }
 }
 

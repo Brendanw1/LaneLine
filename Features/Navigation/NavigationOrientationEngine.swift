@@ -114,8 +114,15 @@ final class NavigationOrientationEngine {
 
         let delta = GeoMath.turnAngleDegrees(fromBearing: displayBearing, toBearing: target)
         if abs(delta) >= config.minimumAngleDeltaDegrees {
+            // The blend factor is calibrated per second of wall time, not
+            // per call: the ride screen now steps this at render cadence
+            // (~30 Hz), and applying 0.35 per frame would converge ~30x
+            // faster than the designed time constant. Composing
+            // (1 - f) per frame reproduces exactly one 0.35 step per
+            // second at any update rate.
+            let fraction = 1 - pow(1 - config.smoothingFactor, max(0, deltaSeconds))
             displayBearing = GeoMath.interpolatedAngle(
-                from: displayBearing, to: target, fraction: config.smoothingFactor
+                from: displayBearing, to: target, fraction: fraction
             )
         }
         return displayBearing

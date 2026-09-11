@@ -2,6 +2,37 @@ import Foundation
 import CoreLocation
 import Observation
 
+/// The puck-advance math for the ride screen, as a pure function so the
+/// "smooth, honest" contract is unit-testable without a render loop:
+/// the puck glides at the rider's measured speed, never leads the last
+/// confirmed GPS position by more than `leadSeconds` of travel, and eases
+/// onto a fix that landed ahead of it instead of teleporting.
+enum DisplayPuck {
+    /// How quickly a confirmed-position jump is closed (~0.25 s constant).
+    private static let catchUpRatePerSecond: Double = 4
+
+    static func advanced(
+        display: Double,
+        truth: Double,
+        speedMs: Double,
+        deltaSeconds: Double,
+        leadSeconds: Double,
+        routeEndMeters: Double
+    ) -> Double {
+        let ceiling = min(routeEndMeters, truth + speedMs * leadSeconds)
+        var step = speedMs * deltaSeconds
+        let gap = truth - display
+        if gap > 0.5 {
+            step += gap * min(1, deltaSeconds * catchUpRatePerSecond)
+        }
+        var next = display + step
+        if next > ceiling {
+            next = max(ceiling, next - (next - ceiling) * min(1, deltaSeconds * catchUpRatePerSecond))
+        }
+        return min(ceiling, max(0, next))
+    }
+}
+
 /// Live state for an active ride. Progress comes from CoreLocation when the
 /// rider has a fix near the route; a sustained fix far from the route flips
 /// into off-route handling (freeze, announce, auto-reroute from the rider's
@@ -15,6 +46,11 @@ final class ActiveRideModel {
 
     private(set) var route: RouteCandidate
     private(set) var progressMeters: Double = 0
+    /// Render-cadence position: glides between logic-tick confirmations at
+    /// the rider's measured speed so the map puck moves like a bike, not a
+    /// strobe. `progressMeters` stays the confirmed truth (GPS snaps, route
+    /// math, announcements); everything the rider *sees* reads this.
+    private(set) var displayProgressMeters: Double = 0
     private(set) var elapsedSeconds: Double = 0
     private(set) var isPaused = false
     private(set) var isRerouting = false
@@ -49,6 +85,12 @@ final class ActiveRideModel {
             ?? CLLocationCoordinate2D(latitude: 37.7702, longitude: -122.4270)
     }
 
+    /// Where the puck is drawn: the smoothly-advancing display position.
+    var displayCoordinate: CLLocationCoordinate2D {
+        interpolatedPosition(at: displayProgressMeters)?.coordinate
+            ?? currentCoordinate
+    }
+
     /// Camera/marker heading — course-first while moving (real GPS travel
     /// direction, immune to the phone's compass being noisy on a bike
     /// mount), falling back to compass heading and finally route bearing
@@ -62,6 +104,22 @@ final class ActiveRideModel {
     var orientationSource: OrientationSource { orientationEngine.activeSource }
 
     private let orientationEngine = NavigationOrientationEngine(initialBearing: 0)
+
+    /// Demo-time compression: `-demoTimeScale N` multiplies each tick's
+    /// deltaSeconds so a full simulated ride finishes in a fraction of the
+    /// wall time (UI tests, screenshots). Resolves to 1 outside DEBUG —
+    /// and only ever reaches `tick` for simulated sources, since a real
+    /// device without a fix freezes progress instead of advancing it.
+    private static let demoTimeScale: Double = {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-demoTimeScale"), index + 1 < args.count,
+           let value = Double(args[index + 1]), value > 0 {
+            return min(value, 120)
+        }
+        #endif
+        return 1
+    }()
 
     private func refreshOrientation(deltaSeconds: Double) {
         let location = locationService.currentLocation
@@ -102,6 +160,121 @@ final class ActiveRideModel {
     }
 
     var currentGrade: Double { currentSegment?.averageGrade ?? 0 }
+
+    // MARK: Upcoming climb warning
+
+    /// A qualifying steep run ahead on the route. `startMeters` is the run's
+    /// position on the route — the announcement dedup key — while
+    /// `distanceMeters`/`lengthMeters`/`maxGradeDecimal` are what the chip
+    /// shows.
+    struct UpcomingClimb: Equatable {
+        let startMeters: Double
+        let maxGradeDecimal: Double
+        let distanceMeters: Double
+        let lengthMeters: Double
+    }
+
+    /// Steepest qualifying climb within the lookahead window, or nil while
+    /// the road ahead is calm. Recomputed each tick.
+    private(set) var upcomingClimb: UpcomingClimb?
+
+    /// How far ahead to scan for steep terrain — a few hundred meters is
+    /// far enough to shift gears, close enough to stay relevant.
+    private let climbLookaheadMeters: Double = 300
+    /// Slope that counts as a "steep climb" for the warning (SF-flavored:
+    /// noticeable on a bike, below the map's 8% paint threshold).
+    private let climbGradeThreshold: Double = 0.06
+    /// Short ramps below this length are DEM noise or intersection crowns,
+    /// not climbs worth interrupting music for.
+    private let climbMinRunMeters: Double = 30
+    /// The chip shows from detection; the chime + phrase fire once the
+    /// climb is actually this close.
+    private let climbAnnounceAtMeters: Double = 200
+    /// Route positions already announced (see `UpcomingClimb.startMeters`).
+    private var announcedClimbKeys: Set<Double> = []
+
+    /// The first qualifying steep run within `lookaheadMeters` of
+    /// `progress`, scanning consecutive flattened vertices. Pure so the
+    /// trigger policy is unit-testable against synthetic terrain: runs
+    /// shorter than `minRunMeters` are ignored, and the first (not the
+    /// steepest) qualifying run wins — that's the one you'll hit first.
+    static func detectClimbAhead(
+        vertices: [(cumulative: Double, elevation: Double?)],
+        progress: Double,
+        lookaheadMeters: Double,
+        gradeThreshold: Double,
+        minRunMeters: Double
+    ) -> UpcomingClimb? {
+        guard vertices.count >= 2 else { return nil }
+        var index = 0
+        while index < vertices.count - 1, vertices[index + 1].cumulative <= progress {
+            index += 1
+        }
+        var runStart: Double?
+        var runMaxGrade: Double = 0
+        var runEnd: Double = progress
+        while index < vertices.count - 1, vertices[index].cumulative <= progress + lookaheadMeters {
+            let a = vertices[index]
+            let b = vertices[index + 1]
+            let run = b.cumulative - a.cumulative
+            if run > 0, let aElevation = a.elevation, let bElevation = b.elevation {
+                let grade = (bElevation - aElevation) / run
+                if grade >= gradeThreshold {
+                    if runStart == nil {
+                        runStart = a.cumulative
+                        runMaxGrade = grade
+                    } else {
+                        runMaxGrade = max(runMaxGrade, grade)
+                    }
+                    runEnd = b.cumulative
+                } else if let start = runStart {
+                    if runEnd - start >= minRunMeters {
+                        return UpcomingClimb(
+                            startMeters: start,
+                            maxGradeDecimal: runMaxGrade,
+                            distanceMeters: start - progress,
+                            lengthMeters: runEnd - start
+                        )
+                    }
+                    runStart = nil
+                    runMaxGrade = 0
+                }
+            }
+            index += 1
+        }
+        if let start = runStart, runEnd - start >= minRunMeters {
+            return UpcomingClimb(
+                startMeters: start,
+                maxGradeDecimal: runMaxGrade,
+                distanceMeters: start - progress,
+                lengthMeters: runEnd - start
+            )
+        }
+        return nil
+    }
+
+    /// Recompute the climb-ahead state and fire the one-shot warning. The
+    /// chip shows from detection; chime + phrase fire once per climb when
+    /// it closes inside `climbAnnounceAtMeters`. Once the rider is on the
+    /// run, the warning yields to the live grade chip.
+    private func updateClimbWarning() {
+        let vertices = flattened.map { (cumulative: $0.cumulative, elevation: $0.coordinate.elevation) }
+        let detected = Self.detectClimbAhead(
+            vertices: vertices,
+            progress: progressMeters,
+            lookaheadMeters: climbLookaheadMeters,
+            gradeThreshold: climbGradeThreshold,
+            minRunMeters: climbMinRunMeters
+        )
+        upcomingClimb = detected.flatMap { $0.distanceMeters < 2 ? nil : $0 }
+
+        if let climb = upcomingClimb, climb.distanceMeters <= climbAnnounceAtMeters,
+           !announcedClimbKeys.contains(climb.startMeters) {
+            announcedClimbKeys.insert(climb.startMeters)
+            voiceGuide?.playAlertSound()
+            voiceGuide?.announce(RideAnnouncements.climbAhead)
+        }
+    }
 
     /// Falls back to the nearest named segment behind or ahead when the
     /// current one has no name — the bundled city-wide OSM network (unlike
@@ -177,6 +350,9 @@ final class ActiveRideModel {
     private let bikeType: BikeType
     private let profile: RiderProfile
     private var tickTask: Task<Void, Never>?
+    /// Display-cadence loop (~30 Hz): advances the puck between logic ticks
+    /// and steps orientation smoothing with real deltas.
+    private var renderTask: Task<Void, Never>?
 
     private let locationService: any LocationServicing
     private let routingService: any RoutingServiceProtocol
@@ -319,10 +495,18 @@ final class ActiveRideModel {
         // default, so the first camera frame doesn't spin in from due north.
         orientationEngine.seed(bearing: locationService.currentHeading ?? routeBearingHeading)
         liveActivity.start(routeLabel: route.label, state: activityState())
+        displayProgressMeters = 0
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
-                self?.tick(deltaSeconds: 1)
+                self?.tick(deltaSeconds: Self.demoTimeScale)
+            }
+        }
+        renderTask = Task { [weak self] in
+            let frameSeconds = 1.0 / 30.0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(frameSeconds))
+                self?.renderTick(deltaSeconds: frameSeconds)
             }
         }
     }
@@ -334,6 +518,8 @@ final class ActiveRideModel {
     func end() {
         tickTask?.cancel()
         tickTask = nil
+        renderTask?.cancel()
+        renderTask = nil
         voiceGuide?.stopSpeaking()
         locationService.stopUpdating()
         liveActivity.end()
@@ -405,9 +591,11 @@ final class ActiveRideModel {
             if let snapped = snapToRoute(origin),
                snapped.distanceFromRoute <= liveTrackingToleranceMeters {
                 progressMeters = snapped.progress
+                displayProgressMeters = snapped.progress
                 isOffRoute = false
             } else {
                 progressMeters = 0
+                displayProgressMeters = 0
                 isOffRoute = true
                 offRouteSeconds = 0
             }
@@ -472,19 +660,97 @@ final class ActiveRideModel {
         } else if locationService.allowsSimulation {
             // No fix at all in a simulated source (simulator, demo):
             // advance along the geometry at bike-appropriate speeds so
-            // the screen is fully exercisable.
+            // the screen is fully exercisable. With a live render loop
+            // the simulation advances at render cadence (smooth puck,
+            // smooth truth) — this branch then only runs for the
+            // synchronous ticks tests drive directly.
             isLocationUnavailable = false
-            let speedMs = CyclingSpeedModel.speedKmh(bikeType: bikeType, grade: currentGrade) / 3.6
-            progressMeters = min(totalMeters, progressMeters + speedMs * deltaSeconds)
+            if renderTask == nil {
+                let speedMs = CyclingSpeedModel.speedKmh(bikeType: bikeType, grade: currentGrade) / 3.6
+                progressMeters = min(totalMeters, progressMeters + speedMs * deltaSeconds)
+            }
         } else {
             // Real device, no usable position: freeze progress and say
             // so. Never fabricate movement here.
             isLocationUnavailable = true
         }
 
-        refreshOrientation(deltaSeconds: deltaSeconds)
         updateAnnouncements()
+        updateClimbWarning()
         liveActivity.update(activityState())
+        // Without a live render loop (tests drive tick directly) the render
+        // work — puck advance plus orientation smoothing — still happens per
+        // tick so synchronous behavior is identical.
+        if renderTask == nil {
+            renderTick(deltaSeconds: deltaSeconds)
+        }
+    }
+
+    // MARK: Render cadence
+
+    /// How far the puck may lead the last confirmed position, in seconds of
+    /// travel at the current speed — enough to bridge the 1 Hz fix interval
+    /// without dead-reckoning into a corner the rider never entered.
+    private let displayLeadSeconds: Double = 1.2
+
+    /// One display step: glide the puck at the rider's measured speed and
+    /// step the course/heading fusion with the real frame delta. The logic
+    /// tick owns truth; this owns what the rider sees moving.
+    private func renderTick(deltaSeconds: Double) {
+        guard !isPaused, !isComplete, !isOffRoute else {
+            displayProgressMeters = progressMeters
+            return
+        }
+        refreshOrientation(deltaSeconds: deltaSeconds)
+
+        if isSimulationAdvancing {
+            if renderTask == nil {
+                // Test mode: tick() advanced the truth synchronously; pin
+                // the puck to it so the two never diverge in assertions.
+                displayProgressMeters = progressMeters
+            } else {
+                // Simulation is the truth: advance the confirmed position
+                // and the puck as one smooth 30 Hz motion (time-scaled in
+                // demo mode).
+                let dt = deltaSeconds * Self.demoTimeScale
+                let speedMs = CyclingSpeedModel.speedKmh(bikeType: bikeType, grade: currentGrade) / 3.6
+                let next = min(totalMeters, progressMeters + speedMs * dt)
+                progressMeters = next
+                displayProgressMeters = next
+            }
+            return
+        }
+
+        // Real fix: dead-reckon forward at the measured speed, capped so the
+        // puck never leads the last confirmed snap by more than a fix
+        // interval. A snap that lands ahead of the puck is caught up with
+        // exponentially (~0.25 s) rather than teleporting.
+        let speedMs = displaySpeedMetersPerSecond
+        displayProgressMeters = DisplayPuck.advanced(
+            display: displayProgressMeters,
+            truth: progressMeters,
+            speedMs: speedMs,
+            deltaSeconds: deltaSeconds,
+            leadSeconds: displayLeadSeconds,
+            routeEndMeters: totalMeters
+        )
+    }
+
+    /// Whether the simulation engine owns forward motion right now: a
+    /// simulated source with no fix at all (demo mode, simulator).
+    private var isSimulationAdvancing: Bool {
+        locationService.allowsSimulation && locationService.currentLocation == nil
+    }
+
+    /// The rider's actual speed for display dead-reckoning: GPS-reported
+    /// speed on a real fix (so the puck tracks what the fitness metrics
+    /// measure, not an assumption), the grade-aware speed model otherwise.
+    private var displaySpeedMetersPerSecond: Double {
+        if isPaused { return 0 }
+        if let fix = locationService.currentLocation, fix.speed >= 0 {
+            return fix.speed
+        }
+        return CyclingSpeedModel.speedKmh(bikeType: bikeType, grade: currentGrade) / 3.6
     }
 
     // MARK: Voice guidance triggers
@@ -495,6 +761,7 @@ final class ActiveRideModel {
         announcedArrival = false
         announcedDestinationApproach500 = false
         announcedDestinationApproach100 = false
+        announcedClimbKeys = []
         lastAnnouncedTurnKey = nil
     }
 

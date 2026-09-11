@@ -102,7 +102,11 @@ LaneLine/
 - Real integrations should be explicit at the boundary layer even if demonstration data is mocked.
 - SFMTA / DataSF bikeway network: represented as importable network and point feature inputs.
 - OSM-derived street attributes: represented as normalized road and bike metadata.
-- Elevation / slope: represented as segment-level grade and climb fields.
+- Elevation / slope: represented as segment-level grade and climb fields; in-ride grade prefers the
+  measured barometric window (RideAggregator) with route segment grade as fallback, and the
+  upcoming-climb warning scans route terrain ahead (grade ≥6% held ≥30 m within ~300 m).
+- Heart rate: read live from HealthKit during rides (Apple Watch's stream); no mock beyond the
+  preview/demo mock service.
 - Apple Music: represented through MusicKit authorization and playback-aware state.
 
 ### Mocking Rule

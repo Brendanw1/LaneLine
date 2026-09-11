@@ -23,6 +23,17 @@ enum MetricsPriority: String, Codable, CaseIterable {
     case climb
 }
 
+// MARK: - Camera Orientation
+
+/// How the follow camera orients the ride map: rotating with travel
+/// (heading-up, "up = where I'm going") or fixed north-up. North-up trades
+/// the moving map for stable, always-readable streets — worth having when
+/// stopped at a light studying the route.
+enum CameraOrientation: String, Codable, CaseIterable {
+    case headingUp
+    case northUp
+}
+
 // MARK: - RideNavigationState
 
 struct RideNavigationState: Identifiable, Codable, Equatable {
@@ -84,6 +95,7 @@ struct RideScreenCustomization: Codable, Equatable {
     var musicTrayDefaultExpanded: Bool
     var visibleSecondaryMetrics: Set<SecondaryMetric>
     var dataPages: [RideDataPage]
+    var cameraOrientation: CameraOrientation
 
     static let maxDataPages = 3
 
@@ -93,6 +105,7 @@ struct RideScreenCustomization: Codable, Equatable {
         case routeQuality
         case currentSpeed
         case averageSpeed
+        case heartRate
     }
 
     init(
@@ -102,7 +115,8 @@ struct RideScreenCustomization: Codable, Equatable {
         metricsPriority: MetricsPriority,
         musicTrayDefaultExpanded: Bool,
         visibleSecondaryMetrics: Set<SecondaryMetric>,
-        dataPages: [RideDataPage] = [.defaultPage()]
+        dataPages: [RideDataPage] = [.defaultPage()],
+        cameraOrientation: CameraOrientation = .headingUp
     ) {
         self.layoutMode = layoutMode
         self.largerControlsEnabled = largerControlsEnabled
@@ -111,6 +125,7 @@ struct RideScreenCustomization: Codable, Equatable {
         self.musicTrayDefaultExpanded = musicTrayDefaultExpanded
         self.visibleSecondaryMetrics = visibleSecondaryMetrics
         self.dataPages = dataPages
+        self.cameraOrientation = cameraOrientation
     }
 
     /// Custom decoding so customizations saved before `dataPages` existed
@@ -125,7 +140,20 @@ struct RideScreenCustomization: Codable, Equatable {
         musicTrayDefaultExpanded = try c.decode(Bool.self, forKey: .musicTrayDefaultExpanded)
         visibleSecondaryMetrics = try c.decode(Set<SecondaryMetric>.self, forKey: .visibleSecondaryMetrics)
         dataPages = try c.decodeIfPresent([RideDataPage].self, forKey: .dataPages) ?? [.defaultPage()]
+        cameraOrientation = try c.decodeIfPresent(CameraOrientation.self, forKey: .cameraOrientation) ?? .headingUp
+        // The heart-rate chip postdates the original metric set: a rider
+        // who never touched the customization (still byte-equal to the old
+        // default) gets the new chip; anyone who curated their own set
+        // keeps exactly what they chose.
+        if visibleSecondaryMetrics == Self.legacyDefaultVisibleSecondaryMetrics {
+            visibleSecondaryMetrics = Self.default.visibleSecondaryMetrics
+        }
     }
+
+    /// `.default`'s secondary set before `heartRate` existed.
+    private static let legacyDefaultVisibleSecondaryMetrics: Set<SecondaryMetric> = [
+        .currentGrade, .climbRemaining,
+    ]
 
     static let `default` = RideScreenCustomization(
         layoutMode: .standard,
@@ -133,7 +161,8 @@ struct RideScreenCustomization: Codable, Equatable {
         highContrastEnabled: false,
         metricsPriority: .time,
         musicTrayDefaultExpanded: false,
-        visibleSecondaryMetrics: [.currentGrade, .climbRemaining]
+        visibleSecondaryMetrics: [.currentGrade, .climbRemaining, .heartRate],
+        cameraOrientation: .headingUp
     )
 }
 
