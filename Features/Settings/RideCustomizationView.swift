@@ -91,6 +91,7 @@ extension RideScreenCustomization.SecondaryMetric {
         case .routeQuality: return "Route quality"
         case .currentSpeed: return "Current speed"
         case .averageSpeed: return "Average speed"
+        case .heartRate: return "Heart rate (Apple Watch)"
         }
     }
 }

@@ -13,6 +13,9 @@ struct RideSample: Codable, Equatable {
     /// Cumulative distance at this sample.
     var distanceMeters: Double
     var gradeDecimal: Double?
+    /// Apple Watch heart rate at this sample, when a stream existed.
+    /// Optional so records written before HR integration still decode.
+    var heartRateBPM: Double? = nil
 }
 
 // MARK: - Ride Summary
@@ -33,6 +36,12 @@ struct RideSummary: Identifiable, Codable, Equatable {
     var calories: Double
     /// False for checkpoint-only (interrupted) rides.
     var isComplete: Bool
+    /// Heart-rate totals from the Watch stream, nil for rides without one.
+    /// Declared last with nil defaults so existing memberwise call sites
+    /// (and old persisted JSON, via synthesized decodeIfPresent) are
+    /// unaffected.
+    var averageHeartRateBPM: Double? = nil
+    var maxHeartRateBPM: Double? = nil
 }
 
 // MARK: - Ride Record

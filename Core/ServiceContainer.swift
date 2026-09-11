@@ -14,6 +14,8 @@ final class ServiceContainer {
     let musicService: any MusicServicing
     let lyricsService: any LyricsProviding
     let healthKitService: any HealthKitServicing
+    /// Live heart rate from the Apple Watch's HealthKit stream during a ride.
+    let heartRateService: any HeartRateMonitoring
     let persistenceService: any PersistenceServiceProtocol
     let rideStore: any RideStoring
     let bikeParkingService: any BikeParkingServicing
@@ -26,6 +28,7 @@ final class ServiceContainer {
         musicService: (any MusicServicing)? = nil,
         lyricsService: any LyricsProviding = CachingLyricsProvider(),
         healthKitService: (any HealthKitServicing)? = nil,
+        heartRateService: (any HeartRateMonitoring)? = nil,
         persistenceService: any PersistenceServiceProtocol = PersistenceService(),
         rideStore: any RideStoring = RideStore(),
         bikeParkingService: any BikeParkingServicing = BikeParkingService()
@@ -39,6 +42,7 @@ final class ServiceContainer {
         self.musicService = musicService ?? AppleMusicService()
         self.lyricsService = lyricsService
         self.healthKitService = healthKitService ?? HealthKitService()
+        self.heartRateService = heartRateService ?? HealthKitHeartRateService()
         self.persistenceService = persistenceService
         self.rideStore = rideStore
         self.bikeParkingService = bikeParkingService
@@ -55,7 +59,8 @@ final class ServiceContainer {
             locationService: MockLocationService(),
             musicService: MockMusicService(),
             lyricsService: MockLyricsProvider(),
-            healthKitService: MockHealthKitService()
+            healthKitService: MockHealthKitService(),
+            heartRateService: MockHeartRateService()
         )
     }
 }

@@ -11,7 +11,8 @@ struct RideMetricDisplay: Equatable {
 @MainActor
 enum RideMetricCatalog {
     static func display(
-        _ id: RideMetricID, recorder: RideRecorder, ride: ActiveRideModel
+        _ id: RideMetricID, recorder: RideRecorder, ride: ActiveRideModel,
+        heartRate: (any HeartRateMonitoring)? = nil
     ) -> RideMetricDisplay {
         switch id {
         case .currentSpeed:
@@ -44,6 +45,10 @@ enum RideMetricCatalog {
             make(id, "m", recorder.altitudeMeters.map(RideFormat.wholeNumber) ?? "—")
         case .calories:
             make(id, "kcal", RideFormat.wholeNumber(recorder.calories))
+        case .heartRate:
+            // Nil until a Watch stream exists — the cell shows "—" rather
+            // than pretending a dead zero is a heart rate.
+            make(id, "bpm", heartRate?.currentBPM.map { RideFormat.wholeNumber($0) } ?? "—")
         }
     }
 

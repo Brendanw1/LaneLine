@@ -12,6 +12,7 @@ struct RideDataPageView: View {
     var onDeletePage: (() -> Void)?
     var onAddPage: (() -> Void)?
 
+    @Environment(\.services) private var services
     @State private var isEditing = false
     @State private var editingSlot: EditingSlot?
 
@@ -69,7 +70,10 @@ struct RideDataPageView: View {
 
     private func cell(for metric: RideMetricID, at index: Int) -> some View {
         RideMetricCell(
-            display: RideMetricCatalog.display(metric, recorder: recorder, ride: ride)
+            display: RideMetricCatalog.display(
+                metric, recorder: recorder, ride: ride,
+                heartRate: services.heartRateService
+            )
         )
         .overlay(alignment: .topTrailing) {
             if isEditing && page.metrics.count > 1 {

@@ -49,6 +49,7 @@ final class RideRecorder {
     private let startElevationMeters: Double?
     private let locationService: any LocationServicing
     private let altimeter: any AltitudeProviding
+    private let heartRate: (any HeartRateMonitoring)?
     private let store: (any RideStoring)?
     private let fallbackSample: () -> FallbackSample?
     private let tickInterval: Double
@@ -68,13 +69,15 @@ final class RideRecorder {
         altimeter: any AltitudeProviding,
         store: (any RideStoring)?,
         fallbackSample: @escaping () -> FallbackSample? = { nil },
-        tickInterval: Double = 1.0
+        tickInterval: Double = 1.0,
+        heartRate: (any HeartRateMonitoring)? = nil
     ) {
         self.aggregator = RideAggregator(profile: profile)
         self.routeName = routeName
         self.startElevationMeters = startElevationMeters
         self.locationService = locationService
         self.altimeter = altimeter
+        self.heartRate = heartRate
         self.store = store
         self.fallbackSample = fallbackSample
         self.tickInterval = tickInterval
@@ -153,9 +156,12 @@ final class RideRecorder {
         } else {
             input = nil   // no position at all — a gap, not a sample
         }
-        guard let input else { return }
+        guard let input else { return }   // no position at all — a gap, not a sample
 
-        samples.append(aggregator.ingest(input))
+        var sample = aggregator.ingest(input)
+        // A live Watch stream rides along per sample.
+        sample.heartRateBPM = heartRate?.currentBPM
+        samples.append(sample)
         publishTotals()
         checkpointIfDue()
     }
@@ -199,6 +205,9 @@ final class RideRecorder {
     }
 
     private func record(complete: Bool) -> RideRecord {
+        // Heart-rate totals roll up from whatever the Watch streamed; a ride
+        // with no stream keeps both nil and the summary hides them.
+        let bpmValues = samples.compactMap(\.heartRateBPM)
         let summary = RideSummary(
             id: summaryID,
             startedAt: startDate,
@@ -211,7 +220,10 @@ final class RideRecorder {
             ascentMeters: ascentMeters,
             descentMeters: descentMeters,
             calories: calories,
-            isComplete: complete
+            isComplete: complete,
+            averageHeartRateBPM: bpmValues.isEmpty
+                ? nil : bpmValues.reduce(0, +) / Double(bpmValues.count),
+            maxHeartRateBPM: bpmValues.max()
         )
         return RideRecord(summary: summary, samples: samples)
     }

@@ -77,7 +77,7 @@ struct RideSummaryView: View {
     }
 
     private var stats: [Stat] {
-        [
+        var rows: [Stat] = [
             Stat(label: "Distance", value: RideFormat.distance(summary.distanceMeters)),
             Stat(label: "Moving time", value: RideFormat.stopwatch(summary.movingSeconds)),
             Stat(label: "Elapsed", value: RideFormat.stopwatch(summary.durationSeconds)),
@@ -87,6 +87,13 @@ struct RideSummaryView: View {
             Stat(label: "Descent", value: RideFormat.elevation(summary.descentMeters)),
             Stat(label: "Calories", value: "\(RideFormat.wholeNumber(summary.calories)) kcal"),
         ]
+        // Watch heart rate appears only when a stream actually fed the ride;
+        // empty grid cells would read as broken rather than absent.
+        if let avgHR = summary.averageHeartRateBPM, let maxHR = summary.maxHeartRateBPM {
+            rows.append(Stat(label: "Avg HR", value: "\(RideFormat.wholeNumber(avgHR)) bpm"))
+            rows.append(Stat(label: "Max HR", value: "\(RideFormat.wholeNumber(maxHR)) bpm"))
+        }
+        return rows
     }
 
     private var statsGrid: some View {
