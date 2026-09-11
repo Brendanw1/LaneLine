@@ -32,6 +32,16 @@ final class AppModel {
     // MARK: Lifecycle
 
     func load() async {
+        // Demo mode seeds everything in LaneLineApp.init. Loading persisted
+        // state on top would clobber that seed — on a fresh install this
+        // flips onboardingComplete back to false and `-demoRide` lands in
+        // onboarding instead of the promised active ride.
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-demoRide") {
+            isLoaded = true
+            return
+        }
+        #endif
         onboardingComplete = await persistence.loadOnboardingComplete()
         if let profile = try? await persistence.loadProfile() {
             riderProfile = profile

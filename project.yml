@@ -57,8 +57,11 @@ targets:
           accurately during rides.
         NSHealthUpdateUsageDescription: >-
           LaneLine saves completed rides to Health as cycling workouts —
-          distance, duration, calories, and route. It never reads your
-          Health data.
+          distance, duration, calories, and route.
+        NSHealthShareUsageDescription: >-
+          LaneLine reads your heart rate from Health during rides so your
+          Apple Watch's live BPM shows on the ride screen and in the ride
+          summary. Nothing else is read, and nothing leaves the device.
         UIBackgroundModes:
           - audio
           - location
@@ -87,6 +90,22 @@ targets:
     dependencies:
       - target: LaneLine
 
+  # End-to-end ride flow over the bundled demo data (`-demoRide`), run via
+  # the LaneLineUITests scheme so the unit-test loop stays fast:
+  # xcodebuild test -scheme LaneLineUITests
+  LaneLineUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: LaneLine
+    sources:
+      - UITests
+    scheme:
+      testTargets:
+        - LaneLineUITests
+
   LaneLineWidgets:
     type: app-extension
     platform: iOS
@@ -104,5 +123,10 @@ targets:
       path: LaneLineWidgets/Info.plist
       properties:
         CFBundleDisplayName: LaneLine
+        # App Store validation requires the extension's version to match the
+        # containing app's (see the app target's Info properties) — xcodegen
+        # rewrites this plist on every generate, so the values live here.
+        CFBundleShortVersionString: "1.8.0"
+        CFBundleVersion: "16"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension

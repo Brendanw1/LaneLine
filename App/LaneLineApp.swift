@@ -15,7 +15,8 @@ struct LaneLineApp: App {
             // the demo moves along the route and voice guidance fires.
             let container = ServiceContainer(
                 locationService: MockLocationService(coordinate: nil),
-                musicService: MockMusicService()
+                musicService: MockMusicService(),
+                heartRateService: MockHeartRateService()
             )
             let model = AppModel(persistence: container.persistenceService)
             model.riderProfile = PreviewData.riderProfile
@@ -116,6 +117,7 @@ struct RootView: View {
             Text("The ride couldn't be written to storage. It is still in memory — try again, or discard it.")
         }
         .task {
+            RideLiveActivityController.sweepStale()
             await appModel.load()
             services.musicService.startObservingPlayback()
             await services.musicService.refreshConnectionState()
