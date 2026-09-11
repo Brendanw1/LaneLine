@@ -235,6 +235,10 @@ final class AppleMusicService: MusicServicing {
         case .none: return .off
         case .one: return .one
         case .all: return .all
+        @unknown default:
+            // Future MusicKit modes degrade to off rather than trapping
+            // under Swift 6 exhaustive-switch rules.
+            return .off
         }
     }
 

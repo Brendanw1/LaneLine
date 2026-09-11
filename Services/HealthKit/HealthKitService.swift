@@ -5,9 +5,9 @@ import Observation
 
 // MARK: - HealthKit Service Protocol
 
-/// Write-only Apple Health integration: logs completed rides as workouts so
-/// they count toward Activity rings and show up in the Fitness app. LaneLine
-/// never requests read access — there's nothing here it needs from Health.
+/// Write-side Apple Health integration: logs completed rides as workouts so
+/// they count toward Activity rings and show up in the Fitness app. Reading
+/// (live heart rate from the Watch's stream) lives in HeartRateService.
 @MainActor
 protocol HealthKitServicing: AnyObject, Observable {
     var authorizationState: HealthKitAuthorizationState { get }
@@ -83,27 +83,45 @@ final class HealthKitService: HealthKitServicing {
         let start = summary.startedAt
         let end = start.addingTimeInterval(summary.durationSeconds)
 
-        let workout = HKWorkout(
-            activityType: .cycling,
-            start: start,
-            end: end,
-            duration: summary.movingSeconds,
-            totalEnergyBurned: HKQuantity(unit: .kilocalorie(), doubleValue: summary.calories),
-            totalDistance: HKQuantity(unit: .meter(), doubleValue: summary.distanceMeters),
-            metadata: [HKMetadataKeyIndoorWorkout: false]
-        )
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = .cycling
+        configuration.locationType = .outdoor
+        let builder = HKWorkoutBuilder(healthStore: store, configuration: configuration, device: nil)
 
         do {
-            try await store.save(workout)
+            try await builder.beginCollection(at: start)
+            try await builder.addMetadata([HKMetadataKeyIndoorWorkout: false])
+            // Totals are explicit samples on the builder — the deprecated
+            // HKWorkout.init folded distance/energy into the workout itself.
+            if summary.distanceMeters > 0 {
+                try await builder.addSamples([HKQuantitySample(
+                    type: distanceType,
+                    quantity: HKQuantity(unit: .meter(), doubleValue: summary.distanceMeters),
+                    start: start,
+                    end: end
+                )])
+            }
+            if summary.calories > 0 {
+                try await builder.addSamples([HKQuantitySample(
+                    type: energyType,
+                    quantity: HKQuantity(unit: .kilocalorie(), doubleValue: summary.calories),
+                    start: start,
+                    end: end
+                )])
+            }
+            try await builder.endCollection(at: end)
+            guard let workout = try await builder.finishWorkout() else {
+                lastErrorMessage = "Couldn't save the ride to Health."
+                return
+            }
             lastErrorMessage = nil
+            do {
+                try await saveRoute(for: record, workout: workout)
+            } catch {
+                lastErrorMessage = "Ride saved to Health, but its route map didn't attach."
+            }
         } catch {
             lastErrorMessage = "Couldn't save the ride to Health."
-            return
-        }
-        do {
-            try await saveRoute(for: record, workout: workout)
-        } catch {
-            lastErrorMessage = "Ride saved to Health, but its route map didn't attach."
         }
     }
 

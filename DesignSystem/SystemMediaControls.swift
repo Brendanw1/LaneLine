@@ -12,6 +12,12 @@ struct SystemVolumeSlider: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MPVolumeView {
         let view = MPVolumeView(frame: .zero)
+        // Deprecated in favor of AVRoutePickerView — which this app renders
+        // separately (see SystemRoutePickerButton below) precisely so the
+        // route picker can be styled/placed. There is no replacement API for
+        // *hiding* MPVolumeView's built-in route button, so the deprecated
+        // call stays: without it the volume slider would show a second,
+        // unstyleable route button next to the system one.
         view.showsRouteButton = false
         view.tintColor = tint
         return view

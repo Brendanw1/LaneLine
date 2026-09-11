@@ -32,7 +32,11 @@ enum RideFormat {
     }
 
     static func signedGrade(_ decimal: Double) -> String {
-        String(format: "%+.0f%%", decimal * 100)
+        // Round before applying the sign: "%+.0f" on a -0.4% grade renders
+        // "-0%", which reads as a (negative) value that isn't there.
+        let percent = (decimal * 100).rounded()
+        guard percent != 0 else { return "0%" }
+        return String(format: "%+.0f%%", percent)
     }
 
     /// Percent-of-route values stored as 0...1.

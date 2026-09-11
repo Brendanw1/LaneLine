@@ -11,8 +11,26 @@ final class RideLiveActivityController {
     private var activity: Activity<RideActivityAttributes>?
     private var lastState: RideActivityAttributes.ContentState?
 
+    /// Live Activities outlive the process that created them — force-quitting
+    /// (or a crash) mid-ride leaves the pill frozen on the Lock Screen with
+    /// stale distances. Called at app launch so a fresh session never
+    /// inherits a ghost of a ride that isn't happening.
+    static func sweepStale() {
+        for stale in Activity<RideActivityAttributes>.activities {
+            Task {
+                await stale.end(
+                    ActivityContent(state: stale.content.state, staleDate: nil),
+                    dismissalPolicy: .immediate
+                )
+            }
+        }
+    }
+
     func start(routeLabel: String, state: RideActivityAttributes.ContentState) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled, activity == nil else { return }
+        // Same cleanup defensively here: this process may have been killed
+        // mid-ride and relaunched straight into a new one.
+        Self.sweepStale()
         let attributes = RideActivityAttributes(routeLabel: routeLabel)
         let content = ActivityContent(state: state, staleDate: nil)
         activity = try? Activity.request(attributes: attributes, content: content, pushType: nil)
