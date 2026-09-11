@@ -21,3 +21,8 @@ data_to_explore/
 
 # Secrets — Socrata app tokens, etc. Never commit.
 Support/Secrets.xcconfig
+
+# Agent session artifacts
+.claude/
+.v2c/
+out/
