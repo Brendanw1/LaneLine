@@ -28,6 +28,10 @@ final class RideRecorder {
     private(set) var calories: Double = 0
     private(set) var currentGradeDecimal: Double?
     private(set) var altitudeMeters: Double?
+    /// Cadence as recorded this tick (sensor or Watch), nil without a source.
+    private(set) var currentCadenceRPM: Double?
+    /// Pedaling-only running average; nil until a non-zero cadence arrives.
+    private(set) var averageCadenceRPM: Double?
     private(set) var isAutoPaused = false
     private(set) var isPaused = false
     private(set) var isRecording = false
@@ -50,6 +54,8 @@ final class RideRecorder {
     private let locationService: any LocationServicing
     private let altimeter: any AltitudeProviding
     private let heartRate: (any HeartRateMonitoring)?
+    private let cyclingSensors: (any CyclingSensorMonitoring)?
+    private var cadenceTotals = CadenceTotals()
     private let store: (any RideStoring)?
     private let fallbackSample: () -> FallbackSample?
     private let tickInterval: Double
@@ -70,7 +76,8 @@ final class RideRecorder {
         store: (any RideStoring)?,
         fallbackSample: @escaping () -> FallbackSample? = { nil },
         tickInterval: Double = 1.0,
-        heartRate: (any HeartRateMonitoring)? = nil
+        heartRate: (any HeartRateMonitoring)? = nil,
+        cyclingSensors: (any CyclingSensorMonitoring)? = nil
     ) {
         self.aggregator = RideAggregator(profile: profile)
         self.routeName = routeName
@@ -78,6 +85,7 @@ final class RideRecorder {
         self.locationService = locationService
         self.altimeter = altimeter
         self.heartRate = heartRate
+        self.cyclingSensors = cyclingSensors
         self.store = store
         self.fallbackSample = fallbackSample
         self.tickInterval = tickInterval
@@ -143,7 +151,7 @@ final class RideRecorder {
                 latitude: location.coordinate.latitude,
                 longitude: location.coordinate.longitude,
                 altitudeMeters: resolvedAltitude(gps: location),
-                speedMs: location.speed >= 0 ? location.speed : nil
+                speedMs: measuredSpeedMs(gps: location)
             )
         } else if locationService.allowsSimulation, let fallback = fallbackSample() {
             input = RideAggregator.Input(
@@ -159,14 +167,24 @@ final class RideRecorder {
         guard let input else { return }   // no position at all — a gap, not a sample
 
         var sample = aggregator.ingest(input)
-        // A live Watch stream rides along per sample.
+        // Live Watch and sensor streams ride along per sample.
         sample.heartRateBPM = heartRate?.currentBPM
+        sample.cadenceRPM = cyclingSensors?.currentCadenceRPM
+        cadenceTotals.add(sample)
         samples.append(sample)
         publishTotals()
         checkpointIfDue()
     }
 
     // MARK: Internals
+
+    /// A wheel-speed sensor beats GPS Doppler: exact, instant, and immune
+    /// to urban-canyon multipath and tunnels. GPS covers rides without one
+    /// (or a sensor in cadence mode).
+    private func measuredSpeedMs(gps: CLLocation) -> Double? {
+        if let wheelKmh = cyclingSensors?.currentSpeedKmh { return wheelKmh / 3.6 }
+        return gps.speed >= 0 ? gps.speed : nil
+    }
 
     /// Barometer first (anchored to the route's start elevation), GPS
     /// altitude as fallback.
@@ -194,6 +212,8 @@ final class RideRecorder {
         currentGradeDecimal = totals.gradeDecimal
         altitudeMeters = totals.altitudeMeters
         isAutoPaused = totals.isAutoPaused
+        currentCadenceRPM = samples.last?.cadenceRPM
+        averageCadenceRPM = cadenceTotals.averageRPM
     }
 
     private func checkpointIfDue() {
@@ -223,8 +243,56 @@ final class RideRecorder {
             isComplete: complete,
             averageHeartRateBPM: bpmValues.isEmpty
                 ? nil : bpmValues.reduce(0, +) / Double(bpmValues.count),
-            maxHeartRateBPM: bpmValues.max()
+            maxHeartRateBPM: bpmValues.max(),
+            averageCadenceRPM: cadenceTotals.averageRPM,
+            maxCadenceRPM: cadenceTotals.maxRPM,
+            totalCrankRevolutions: cadenceTotals.hasSource ? cadenceTotals.revolutions : nil
         )
         return RideRecord(summary: summary, samples: samples)
+    }
+}
+
+// MARK: - Cadence Totals
+
+/// Running cadence rollup, fed one recorded sample at a time. Average is
+/// pedaling-only (zeros excluded, the bike-computer convention); max
+/// ignores readings above a plausible ceiling; revolutions integrate
+/// cadence over the time between consecutive samples. A ride whose
+/// samples never carried cadence keeps everything nil.
+struct CadenceTotals {
+    static let maxPlausibleRPM: Double = 220
+    /// A sample gap longer than this (a GPS dropout) isn't integrated —
+    /// guessing pedaling through a hole would invent revolutions.
+    static let maxIntegrationGapSeconds: Double = 5
+
+    private(set) var hasSource = false
+    private(set) var maxRPM: Double?
+    private(set) var revolutions: Double = 0
+    private var pedalingSum: Double = 0
+    private var pedalingCount = 0
+    private var lastSample: (t: Double, rpm: Double)?
+
+    var averageRPM: Double? {
+        pedalingCount > 0 ? pedalingSum / Double(pedalingCount) : nil
+    }
+
+    mutating func add(_ sample: RideSample) {
+        guard let rpm = sample.cadenceRPM, rpm >= 0, rpm <= Self.maxPlausibleRPM else {
+            lastSample = nil
+            return
+        }
+        hasSource = true
+        if rpm > 0 {
+            pedalingSum += rpm
+            pedalingCount += 1
+            maxRPM = max(maxRPM ?? 0, rpm)
+        }
+        if let last = lastSample {
+            let dt = sample.t - last.t
+            if dt > 0, dt <= Self.maxIntegrationGapSeconds {
+                revolutions += (last.rpm + rpm) / 2 * dt / 60
+            }
+        }
+        lastSample = (sample.t, rpm)
     }
 }

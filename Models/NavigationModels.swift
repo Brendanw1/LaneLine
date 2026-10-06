@@ -106,6 +106,7 @@ struct RideScreenCustomization: Codable, Equatable {
         case currentSpeed
         case averageSpeed
         case heartRate
+        case cadence
     }
 
     init(
@@ -141,18 +142,20 @@ struct RideScreenCustomization: Codable, Equatable {
         visibleSecondaryMetrics = try c.decode(Set<SecondaryMetric>.self, forKey: .visibleSecondaryMetrics)
         dataPages = try c.decodeIfPresent([RideDataPage].self, forKey: .dataPages) ?? [.defaultPage()]
         cameraOrientation = try c.decodeIfPresent(CameraOrientation.self, forKey: .cameraOrientation) ?? .headingUp
-        // The heart-rate chip postdates the original metric set: a rider
-        // who never touched the customization (still byte-equal to the old
-        // default) gets the new chip; anyone who curated their own set
-        // keeps exactly what they chose.
-        if visibleSecondaryMetrics == Self.legacyDefaultVisibleSecondaryMetrics {
+        // The heart-rate and cadence chips postdate the original metric
+        // set: a rider who never touched the customization (still
+        // byte-equal to an old default) gets the new chips; anyone who
+        // curated their own set keeps exactly what they chose.
+        if Self.legacyDefaultVisibleSecondaryMetrics.contains(visibleSecondaryMetrics) {
             visibleSecondaryMetrics = Self.default.visibleSecondaryMetrics
         }
     }
 
-    /// `.default`'s secondary set before `heartRate` existed.
-    private static let legacyDefaultVisibleSecondaryMetrics: Set<SecondaryMetric> = [
-        .currentGrade, .climbRemaining,
+    /// Every earlier `.default` secondary set: before `heartRate`, then
+    /// before `cadence`.
+    private static let legacyDefaultVisibleSecondaryMetrics: [Set<SecondaryMetric>] = [
+        [.currentGrade, .climbRemaining],
+        [.currentGrade, .climbRemaining, .heartRate],
     ]
 
     static let `default` = RideScreenCustomization(
@@ -161,7 +164,7 @@ struct RideScreenCustomization: Codable, Equatable {
         highContrastEnabled: false,
         metricsPriority: .time,
         musicTrayDefaultExpanded: false,
-        visibleSecondaryMetrics: [.currentGrade, .climbRemaining, .heartRate],
+        visibleSecondaryMetrics: [.currentGrade, .climbRemaining, .heartRate, .cadence],
         cameraOrientation: .headingUp
     )
 }

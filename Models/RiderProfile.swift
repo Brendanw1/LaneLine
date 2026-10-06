@@ -26,6 +26,9 @@ struct RiderProfile: Identifiable, Codable, Equatable {
     var weightKg: Double
     /// Whether completed rides are logged to Apple Health as workouts.
     var healthKitEnabled: Bool
+    /// Tire circumference for wheel-speed sensors; millimeters. 2105 mm is
+    /// a 700×25c road tire.
+    var wheelCircumferenceMm: Double
 
     init(
         id: UUID = UUID(),
@@ -44,7 +47,8 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         appleMusicEnabled: Bool = false,
         defaultRidePlaylistID: String? = nil,
         weightKg: Double = 75,
-        healthKitEnabled: Bool = false
+        healthKitEnabled: Bool = false,
+        wheelCircumferenceMm: Double = 2105
     ) {
         self.id = id
         self.name = name
@@ -57,10 +61,11 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         self.defaultRidePlaylistID = defaultRidePlaylistID
         self.weightKg = weightKg
         self.healthKitEnabled = healthKitEnabled
+        self.wheelCircumferenceMm = wheelCircumferenceMm
     }
 
-    /// Custom decoding so profiles saved before `weightKg`/`healthKitEnabled`
-    /// existed still load.
+    /// Custom decoding so profiles saved before `weightKg`/`healthKitEnabled`/
+    /// `wheelCircumferenceMm` existed still load.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -74,6 +79,7 @@ struct RiderProfile: Identifiable, Codable, Equatable {
         defaultRidePlaylistID = try c.decodeIfPresent(String.self, forKey: .defaultRidePlaylistID)
         weightKg = try c.decodeIfPresent(Double.self, forKey: .weightKg) ?? 75
         healthKitEnabled = try c.decodeIfPresent(Bool.self, forKey: .healthKitEnabled) ?? false
+        wheelCircumferenceMm = try c.decodeIfPresent(Double.self, forKey: .wheelCircumferenceMm) ?? 2105
     }
 }
 

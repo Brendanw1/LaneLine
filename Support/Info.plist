@@ -24,10 +24,12 @@
 	<false/>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>LaneLine shows your Apple Music now playing info and ride playlists on the navigation screen so you can control music without leaving turn-by-turn guidance.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>LaneLine connects to your Bluetooth speed and cadence sensors to show live cadence and wheel speed while you ride and save them with the ride.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>LaneLine reads your heart rate from Health during rides so your Apple Watch's live BPM shows on the ride screen and in the ride summary. Nothing else is read, and nothing leaves the device.</string>
+	<string>LaneLine reads your heart rate and cycling cadence from Health during rides so your Apple Watch's live readings show on the ride screen and in the ride summary. Nothing else is read, and nothing leaves the device.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>LaneLine saves completed rides to Health as cycling workouts — distance, duration, calories, and route.</string>
+	<string>LaneLine saves completed rides to Health as cycling workouts — distance, duration, calories, route, and cadence.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>LaneLine uses your location to plan bike routes from where you are and to guide you turn by turn while riding.</string>
 	<key>NSMotionUsageDescription</key>
@@ -38,6 +40,7 @@
 	<array>
 		<string>audio</string>
 		<string>location</string>
+		<string>bluetooth-central</string>
 	</array>
 	<key>UILaunchScreen</key>
 	<dict/>

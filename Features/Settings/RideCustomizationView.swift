@@ -92,6 +92,7 @@ extension RideScreenCustomization.SecondaryMetric {
         case .currentSpeed: return "Current speed"
         case .averageSpeed: return "Average speed"
         case .heartRate: return "Heart rate (Apple Watch)"
+        case .cadence: return "Cadence (sensor or Apple Watch)"
         }
     }
 }

@@ -16,6 +16,9 @@ final class ServiceContainer {
     let healthKitService: any HealthKitServicing
     /// Live heart rate from the Apple Watch's HealthKit stream during a ride.
     let heartRateService: any HeartRateMonitoring
+    /// Bluetooth speed/cadence sensors (Magene S3+ et al.) with the Apple
+    /// Watch's cadence stream as fallback.
+    let cyclingSensorService: any CyclingSensorMonitoring
     let persistenceService: any PersistenceServiceProtocol
     let rideStore: any RideStoring
     let bikeParkingService: any BikeParkingServicing
@@ -29,6 +32,7 @@ final class ServiceContainer {
         lyricsService: any LyricsProviding = CachingLyricsProvider(),
         healthKitService: (any HealthKitServicing)? = nil,
         heartRateService: (any HeartRateMonitoring)? = nil,
+        cyclingSensorService: (any CyclingSensorMonitoring)? = nil,
         persistenceService: any PersistenceServiceProtocol = PersistenceService(),
         rideStore: any RideStoring = RideStore(),
         bikeParkingService: any BikeParkingServicing = BikeParkingService()
@@ -43,6 +47,7 @@ final class ServiceContainer {
         self.lyricsService = lyricsService
         self.healthKitService = healthKitService ?? HealthKitService()
         self.heartRateService = heartRateService ?? HealthKitHeartRateService()
+        self.cyclingSensorService = cyclingSensorService ?? BluetoothCyclingSensorService()
         self.persistenceService = persistenceService
         self.rideStore = rideStore
         self.bikeParkingService = bikeParkingService
@@ -60,7 +65,8 @@ final class ServiceContainer {
             musicService: MockMusicService(),
             lyricsService: MockLyricsProvider(),
             healthKitService: MockHealthKitService(),
-            heartRateService: MockHeartRateService()
+            heartRateService: MockHeartRateService(),
+            cyclingSensorService: MockCyclingSensorService()
         )
     }
 }

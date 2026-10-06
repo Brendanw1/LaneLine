@@ -25,6 +25,10 @@ struct RideSummaryView: View {
                         .frame(height: 140)
                         .padding(.horizontal, LaneLineDesign.Spacing.medium)
                     }
+                    ForEach(sensorSeries) { series in
+                        RideSensorChart(series: series)
+                            .padding(.horizontal, LaneLineDesign.Spacing.medium)
+                    }
                 }
                 .padding(.vertical, LaneLineDesign.Spacing.medium)
             }
@@ -93,6 +97,14 @@ struct RideSummaryView: View {
             rows.append(Stat(label: "Avg HR", value: "\(RideFormat.wholeNumber(avgHR)) bpm"))
             rows.append(Stat(label: "Max HR", value: "\(RideFormat.wholeNumber(maxHR)) bpm"))
         }
+        // Same rule for cadence: only rides a sensor (or the Watch) fed.
+        if let avgCadence = summary.averageCadenceRPM, let maxCadence = summary.maxCadenceRPM {
+            rows.append(Stat(label: "Avg cadence", value: "\(RideFormat.wholeNumber(avgCadence)) rpm"))
+            rows.append(Stat(label: "Max cadence", value: "\(RideFormat.wholeNumber(maxCadence)) rpm"))
+        }
+        if let revolutions = summary.totalCrankRevolutions, revolutions > 0 {
+            rows.append(Stat(label: "Pedal strokes", value: RideFormat.wholeNumber(revolutions)))
+        }
         return rows
     }
 
@@ -120,6 +132,21 @@ struct RideSummaryView: View {
             }
         }
         .padding(.horizontal, LaneLineDesign.Spacing.medium)
+    }
+
+    // MARK: Sensor traces
+
+    private var sensorSeries: [RideSensorSeries] {
+        [
+            RideSensorSeries.from(
+                record.samples, title: "Heart rate", unit: "bpm",
+                color: LaneLineDesign.Colors.danger, value: \.heartRateBPM
+            ),
+            RideSensorSeries.from(
+                record.samples, title: "Cadence", unit: "rpm",
+                color: LaneLineDesign.Colors.primary, value: \.cadenceRPM
+            ),
+        ].compactMap { $0 }
     }
 
     // MARK: Elevation

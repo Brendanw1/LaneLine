@@ -16,6 +16,10 @@ struct RideSample: Codable, Equatable {
     /// Apple Watch heart rate at this sample, when a stream existed.
     /// Optional so records written before HR integration still decode.
     var heartRateBPM: Double? = nil
+    /// Pedaling cadence at this sample — from a Bluetooth cadence sensor
+    /// (e.g. Magene S3+) or the Apple Watch's stream. 0 means coasting
+    /// with a live sensor; nil means no cadence source.
+    var cadenceRPM: Double? = nil
 }
 
 // MARK: - Ride Summary
@@ -42,6 +46,13 @@ struct RideSummary: Identifiable, Codable, Equatable {
     /// unaffected.
     var averageHeartRateBPM: Double? = nil
     var maxHeartRateBPM: Double? = nil
+    /// Cadence totals, nil for rides without a cadence source. Average is
+    /// pedaling-only (coasting zeros excluded), the bike-computer
+    /// convention — a long descent shouldn't drag 88 RPM down to 60.
+    var averageCadenceRPM: Double? = nil
+    var maxCadenceRPM: Double? = nil
+    /// Crank revolutions over the ride, estimated from per-sample cadence.
+    var totalCrankRevolutions: Double? = nil
 }
 
 // MARK: - Ride Record

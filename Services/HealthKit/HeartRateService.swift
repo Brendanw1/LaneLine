@@ -64,7 +64,9 @@ final class HealthKitHeartRateService: HeartRateMonitoring {
         isMonitoring = true
 
         do {
-            try await store.requestAuthorization(toShare: [], read: [heartRateType])
+            // The shared ride read set (heart rate + Watch cadence), so the
+            // rider sees one Health sheet, not one per stream.
+            try await store.requestAuthorization(toShare: [], read: HealthKitRideStreams.readTypes)
         } catch {
             return
         }

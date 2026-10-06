@@ -72,7 +72,8 @@ struct RideDataPageView: View {
         RideMetricCell(
             display: RideMetricCatalog.display(
                 metric, recorder: recorder, ride: ride,
-                heartRate: services.heartRateService
+                heartRate: services.heartRateService,
+                sensors: services.cyclingSensorService
             )
         )
         .overlay(alignment: .topTrailing) {

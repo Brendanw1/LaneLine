@@ -17,6 +17,7 @@ struct SettingsView: View {
                 riderProfileSection
                 appleMusicSection
                 healthKitSection
+                sensorsSection
                 rideScreenSection
                 dataSection
                 aboutSection
@@ -141,7 +142,7 @@ struct SettingsView: View {
         } header: {
             Text("Apple Health")
         } footer: {
-            Text("Saves distance, duration, calories, and route as a cycling workout each time you save a ride. Write-only — LaneLine never reads your Health data.")
+            Text("Saves distance, duration, calories, route, and sensor cadence as a cycling workout each time you save a ride. During rides LaneLine reads only your Apple Watch's heart rate and cadence, on-device.")
         }
     }
 
@@ -167,6 +168,30 @@ struct SettingsView: View {
                 }
             }
         )
+    }
+
+    // MARK: Sensors
+
+    private var sensorsSection: some View {
+        let sensors = services.cyclingSensorService
+        let paired = sensors.sensors.filter(\.isPaired)
+        return Section {
+            NavigationLink {
+                SensorsView()
+            } label: {
+                HStack {
+                    Text("Speed & cadence sensors")
+                    Spacer()
+                    Text(paired.isEmpty ? "None" : paired.map(\.name).joined(separator: ", "))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        } header: {
+            Text("Sensors")
+        } footer: {
+            Text("Bluetooth speed/cadence sensors like the Magene S3+. Heart rate comes from your Apple Watch.")
+        }
     }
 
     // MARK: Ride screen

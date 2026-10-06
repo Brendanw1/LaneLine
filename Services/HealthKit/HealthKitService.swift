@@ -32,9 +32,18 @@ final class HealthKitService: HealthKitServicing {
     private let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceCycling)!
     private let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!
     private let routeType = HKSeriesType.workoutRoute()
+    private let cadenceType = HealthKitRideStreams.cyclingCadence
 
+    /// The core workout types; authorization state reflects only these, so
+    /// a rider who connected Health before cadence existed keeps logging
+    /// rides while the cadence permission is still undecided.
     private var shareTypes: Set<HKSampleType> {
         [workoutType, distanceType, energyType, routeType]
+    }
+
+    /// Core types plus sensor streams written alongside the workout.
+    private var requestedShareTypes: Set<HKSampleType> {
+        shareTypes.union([cadenceType])
     }
 
     init() {
@@ -63,7 +72,7 @@ final class HealthKitService: HealthKitServicing {
             return
         }
         do {
-            try await store.requestAuthorization(toShare: shareTypes, read: [])
+            try await store.requestAuthorization(toShare: requestedShareTypes, read: [])
             refreshAuthorizationState()
         } catch {
             lastErrorMessage = "Couldn't request Health access."
@@ -101,6 +110,8 @@ final class HealthKitService: HealthKitServicing {
                     end: end
                 )])
             }
+            // Best-effort: a cadence write problem must not cost the workout.
+            try? await addCadenceSamples(for: record, to: builder)
             if summary.calories > 0 {
                 try await builder.addSamples([HKQuantitySample(
                     type: energyType,
@@ -123,6 +134,29 @@ final class HealthKitService: HealthKitServicing {
         } catch {
             lastErrorMessage = "Couldn't save the ride to Health."
         }
+    }
+
+    /// Sensor cadence as `cyclingCadence` samples on the workout, so the
+    /// Fitness app shows the cadence trace next to the Watch's heart rate.
+    /// Riders who granted Health before cadence existed see a one-time
+    /// prompt for just this type the first time a cadence ride is saved;
+    /// declining it still saves the workout.
+    private func addCadenceSamples(for record: RideRecord, to builder: HKWorkoutBuilder) async throws {
+        let windows = HealthCadenceSamples.windows(for: record)
+        guard !windows.isEmpty else { return }
+        if store.authorizationStatus(for: cadenceType) == .notDetermined {
+            try? await store.requestAuthorization(toShare: [cadenceType], read: [])
+        }
+        guard store.authorizationStatus(for: cadenceType) == .sharingAuthorized else { return }
+        let samples = windows.map { window in
+            HKQuantitySample(
+                type: cadenceType,
+                quantity: HKQuantity(unit: HealthKitRideStreams.perMinute, doubleValue: window.rpm),
+                start: window.start,
+                end: window.end
+            )
+        }
+        try await builder.addSamples(samples)
     }
 
     /// Route data is a separate write from the workout itself — best-effort;
@@ -162,6 +196,42 @@ final class HealthKitService: HealthKitServicing {
     }
 
     private enum HealthKitError: Error { case routeInsertFailed, routeFinishFailed }
+}
+
+// MARK: - Cadence Windows
+
+/// Folds a ride's ~1 Hz cadence samples into fixed windows for Health —
+/// a 2-hour ride becomes ~1,400 samples instead of 7,200, the same
+/// resolution the Watch itself writes. Windows with no cadence (no source,
+/// or a GPS gap) are skipped; coasting zeros are kept so the trace shows
+/// where the rider freewheeled.
+enum HealthCadenceSamples {
+    struct Window: Equatable {
+        let start: Date
+        let end: Date
+        let rpm: Double
+    }
+
+    static func windows(for record: RideRecord, windowSeconds: Double = 5) -> [Window] {
+        guard windowSeconds > 0 else { return [] }
+        let origin = record.summary.startedAt
+        // Samples must sit inside the workout interval the builder saves.
+        let rideEnd = origin.addingTimeInterval(record.summary.durationSeconds)
+        var buckets: [Int: (sum: Double, count: Int)] = [:]
+        for sample in record.samples {
+            guard let rpm = sample.cadenceRPM, rpm >= 0, sample.t >= 0 else { continue }
+            let key = Int(sample.t / windowSeconds)
+            let bucket = buckets[key] ?? (0, 0)
+            buckets[key] = (bucket.sum + rpm, bucket.count + 1)
+        }
+        return buckets.keys.sorted().compactMap { key in
+            guard let bucket = buckets[key], bucket.count > 0 else { return nil }
+            let start = origin.addingTimeInterval(Double(key) * windowSeconds)
+            let end = min(start.addingTimeInterval(windowSeconds), rideEnd)
+            guard end > start else { return nil }
+            return Window(start: start, end: end, rpm: bucket.sum / Double(bucket.count))
+        }
+    }
 }
 
 // MARK: - Preview / Simulator Mock

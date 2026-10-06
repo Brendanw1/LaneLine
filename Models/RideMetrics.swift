@@ -12,6 +12,7 @@ enum RideMetricID: String, Codable, CaseIterable, Identifiable {
     case ascent, descent, climbRemaining, grade, altitude
     case calories
     case heartRate
+    case cadence, averageCadence
 
     var id: String { rawValue }
 
@@ -33,6 +34,8 @@ enum RideMetricID: String, Codable, CaseIterable, Identifiable {
         case .altitude: "Altitude"
         case .calories: "Calories"
         case .heartRate: "Heart rate"
+        case .cadence: "Cadence"
+        case .averageCadence: "Avg cadence"
         }
     }
 }

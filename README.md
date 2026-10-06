@@ -106,6 +106,32 @@ are treated as absent — a stale number on a moving screen is worse than no
 number. First ride triggers the Health read permission once; if denied, the
 metric simply never appears.
 
+### Speed/cadence sensors (Magene S3+)
+
+LaneLine speaks the standard Bluetooth **Cycling Speed and Cadence** profile,
+so the Magene S3+ (and any other BLE speed/cadence pod) works directly with
+the iPhone. Pair it in *Settings → Sensors → Add sensor* — spin the crank or
+wheel first to wake it. After that it reconnects on its own at every ride
+start and after dropouts; nothing to do mid-ride.
+
+- **Cadence mode** — live RPM chip on the ride screen, *Cadence* / *Avg
+  cadence* cells for data pages, per-sample cadence in the recorded ride,
+  avg/max cadence and pedal strokes on the summary, a cadence trace next to
+  the heart-rate trace, and cadence written to Apple Health with the workout.
+  Average cadence is pedaling-only (coasting zeros excluded).
+- **Speed mode** — ride speed comes from the wheel instead of GPS (exact,
+  instant, works in tunnels and between tall buildings). Set your tire size
+  under *Settings → Sensors → Wheel*.
+- The S3+ is one mode at a time (pull and reinsert the battery to switch);
+  LaneLine detects the mode from the data. Pair two sensors to get both.
+- ANT+ isn't available on iPhone hardware; the Bluetooth side is used.
+
+**With an Apple Watch:** heart rate streams from the Watch as before. Most
+sensors accept a single Bluetooth connection, so pair yours to *either* the
+iPhone or the Watch. If it's paired to the Watch and you're recording a
+Watch cycling workout, LaneLine reads the Watch's cadence from Health
+instead; a sensor connected to the iPhone always takes priority.
+
 ### DataSF app token (optional)
 
 Live ingestion works anonymously against Socrata but is rate-limited. For
@@ -126,6 +152,8 @@ Services/
   AppleMusic/       MusicKit service (auth, subscription, playback, queue,
                     shuffle/repeat, playlists) + LRCLIB lyrics client
   Location/         CLLocationManager wrapper + mock
+  Sensors/          Bluetooth CSC speed/cadence sensors (CoreBluetooth),
+                    pure CSC parsing + rate math, demo mock
   RideRecording/    RideRecorder (1 Hz sampling), RideAggregator (pure metrics
                     math), CyclingPowerModel (calorie physics), RideStore
                     (JSON-per-ride persistence), AltimeterService (barometer)

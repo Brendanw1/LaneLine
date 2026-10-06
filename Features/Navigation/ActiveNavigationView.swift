@@ -126,8 +126,15 @@ struct ActiveNavigationView: View {
                         altitudeMeters: model.currentElevationMeters
                     )
                 },
-                heartRate: services.heartRateService
+                heartRate: services.heartRateService,
+                cyclingSensors: services.cyclingSensorService
             )
+            // Sensors first so the first recorded tick can already carry
+            // wheel speed and cadence.
+            services.cyclingSensorService.setWheelCircumference(
+                meters: appModel.riderProfile.wheelCircumferenceMm / 1000
+            )
+            services.cyclingSensorService.start(includingAppleWatch: true)
             rideRecorder.start()
             // Watch heart rate: authorization (once ever) + observer start
             // alongside the ride; stopped when the ride screen leaves.
@@ -150,6 +157,7 @@ struct ActiveNavigationView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled = false
             services.heartRateService.stop()
+            services.cyclingSensorService.stop()
             if let recorder, recorder.isRecording { _ = recorder.finish() }
             ride?.end()
         }
@@ -521,6 +529,15 @@ struct ActiveNavigationView: View {
                     tint: LaneLineDesign.Colors.danger
                 )
                 .accessibilityLabel("Heart rate \(RideFormat.wholeNumber(bpm)) beats per minute")
+            }
+            if customization.visibleSecondaryMetrics.contains(.cadence),
+               let rpm = services.cyclingSensorService.currentCadenceRPM {
+                secondaryChip(
+                    icon: "arrow.triangle.2.circlepath",
+                    text: "\(RideFormat.wholeNumber(rpm)) rpm",
+                    tint: LaneLineDesign.Colors.primary
+                )
+                .accessibilityLabel("Cadence \(RideFormat.wholeNumber(rpm)) revolutions per minute")
             }
             if customization.visibleSecondaryMetrics.contains(.currentGrade) {
                 // Prefer the measured slope — barometer over a trailing

@@ -85,6 +85,7 @@ LaneLine/
     GeospatialData/
     Location/
     AppleMusic/
+    Sensors/
     Persistence/
   PreviewContent/
   Tests/
@@ -96,6 +97,8 @@ LaneLine/
 - **RouteScoringService**: converts segment attributes into weighted route scores.
 - **LocationService**: current location, heading, and navigation state.
 - **AppleMusicService**: authorization, subscription status, now playing, playback control.
+- **CyclingSensorService**: Bluetooth Cycling Speed and Cadence sensors (Magene S3+ et al.) —
+  pairing, auto-reconnect, live cadence and wheel speed, with Apple Watch cadence as fallback.
 - **PersistenceService**: rider profile, saved places, UI preferences, route settings.
 
 ### Real Integration Expectations
@@ -107,6 +110,10 @@ LaneLine/
   upcoming-climb warning scans route terrain ahead (grade ≥6% held ≥30 m within ~300 m).
 - Heart rate: read live from HealthKit during rides (Apple Watch's stream); no mock beyond the
   preview/demo mock service.
+- Cadence / wheel speed: Bluetooth SIG CSC profile (service 0x1816, measurement 0x2A5B) via
+  CoreBluetooth; parsing and rate math are pure (`CSCMeasurement`, `CSCRateCalculator`). When the
+  Apple Watch holds the sensor instead, cadence is read from HealthKit (`cyclingCadence`). Saved
+  rides write cadence to Health with the workout.
 - Apple Music: represented through MusicKit authorization and playback-aware state.
 
 ### Mocking Rule

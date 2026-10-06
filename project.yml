@@ -57,14 +57,20 @@ targets:
           accurately during rides.
         NSHealthUpdateUsageDescription: >-
           LaneLine saves completed rides to Health as cycling workouts —
-          distance, duration, calories, and route.
+          distance, duration, calories, route, and cadence.
         NSHealthShareUsageDescription: >-
-          LaneLine reads your heart rate from Health during rides so your
-          Apple Watch's live BPM shows on the ride screen and in the ride
-          summary. Nothing else is read, and nothing leaves the device.
+          LaneLine reads your heart rate and cycling cadence from Health
+          during rides so your Apple Watch's live readings show on the ride
+          screen and in the ride summary. Nothing else is read, and nothing
+          leaves the device.
+        NSBluetoothAlwaysUsageDescription: >-
+          LaneLine connects to your Bluetooth speed and cadence sensors to
+          show live cadence and wheel speed while you ride and save them
+          with the ride.
         UIBackgroundModes:
           - audio
           - location
+          - bluetooth-central
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
     entitlements:

@@ -16,7 +16,8 @@ struct LaneLineApp: App {
             let container = ServiceContainer(
                 locationService: MockLocationService(coordinate: nil),
                 musicService: MockMusicService(),
-                heartRateService: MockHeartRateService()
+                heartRateService: MockHeartRateService(),
+                cyclingSensorService: MockCyclingSensorService()
             )
             let model = AppModel(persistence: container.persistenceService)
             model.riderProfile = PreviewData.riderProfile

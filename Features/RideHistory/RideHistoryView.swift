@@ -66,6 +66,18 @@ struct RideHistoryView: View {
         summaries = await services.rideStore.loadSummaries()
     }
 
+    /// "♥ 148 bpm  ·  86 rpm" — only the streams that fed this ride.
+    private func sensorLine(_ summary: RideSummary) -> String? {
+        var parts: [String] = []
+        if let hr = summary.averageHeartRateBPM {
+            parts.append("♥ \(RideFormat.wholeNumber(hr)) bpm")
+        }
+        if let cadence = summary.averageCadenceRPM {
+            parts.append("\(RideFormat.wholeNumber(cadence)) rpm")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "  ·  ")
+    }
+
     private func row(_ summary: RideSummary) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -95,6 +107,11 @@ struct RideHistoryView: View {
             )
             .font(.subheadline)
             .foregroundStyle(.secondary)
+            if let sensorLine = sensorLine(summary) {
+                Text(sensorLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 2)
     }
